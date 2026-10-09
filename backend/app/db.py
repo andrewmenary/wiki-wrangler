@@ -42,6 +42,21 @@ def initialize_database(engine: Engine) -> None:
                 """
             )
         )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS attachments (
+                    id TEXT PRIMARY KEY,
+                    item_id TEXT NOT NULL REFERENCES items(id),
+                    filename TEXT NOT NULL,
+                    mime_type TEXT,
+                    storage_path TEXT NOT NULL,
+                    size_bytes INTEGER NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
 
 
 def database_url_for_path(database_path: Path) -> str:

@@ -2,7 +2,10 @@ pyproject.toml
 app/__init__.py
 app/db.py
 app/main.py
+app/domain/__init__.py
+app/domain/items.py
 tests/test_health.py
+tests/test_item_status.py
 wiki_wrangler_backend.egg-info/PKG-INFO
 wiki_wrangler_backend.egg-info/SOURCES.txt
 wiki_wrangler_backend.egg-info/dependency_links.txt

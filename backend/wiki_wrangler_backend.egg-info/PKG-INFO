@@ -4,6 +4,7 @@ Version: 0.1.0
 Summary: API for staging, curating, and publishing knowledge to a Git-based wiki.
 Requires-Python: >=3.12
 Requires-Dist: fastapi<1.0,>=0.115
+Requires-Dist: python-multipart<1.0,>=0.0.9
 Requires-Dist: uvicorn[standard]<1.0,>=0.30
 Requires-Dist: sqlalchemy<3.0,>=2.0
 Provides-Extra: dev
