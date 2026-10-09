@@ -1,0 +1,11 @@
+services:
+  api:
+    build:
+      context: ../backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - wiki-wrangler-data:/data
+
+volumes:
+  wiki-wrangler-data:
