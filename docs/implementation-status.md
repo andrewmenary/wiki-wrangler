@@ -25,9 +25,9 @@ configuration, while partial items are intentionally called out in the notes.
   - [ ] Session cookie
   - [ ] Login screen
 - [ ] CI pipeline
-  - [ ] Lint
-  - [ ] Unit tests
-  - [ ] Docker image build
+  - [x] Lint workflow configured
+  - [x] Unit-test workflow configured
+  - [x] Docker image build workflow configured
 
 ## Phase 1 - Core Capture and Conversion
 
@@ -79,4 +79,4 @@ configuration, while partial items are intentionally called out in the notes.
 - [x] Backend unit/API tests pass
 - [x] Editor diagnostics clear for touched Python files
 - [x] Docker Compose naming verified in configuration
-- [ ] CI validates the same checks automatically
+- [x] CI validates the same checks automatically
