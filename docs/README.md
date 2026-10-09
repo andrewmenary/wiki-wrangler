@@ -24,17 +24,19 @@ intentionally follows these documents rather than preceding them.
 9. [Security Model](./09-security-model.md) — authN/authZ, secrets, data protection,
    publish-path integrity, audit.
 10. [MVP Roadmap](./10-mvp-roadmap.md) — phased plan to the core capture→publish loop.
-11. [Post-MVP Roadmap](./11-post-mvp-roadmap.md) — connectors, AI features, scale-out.
-12. [Suggested Repository Structure](./12-repo-structure.md) — application monorepo
+11. [Implementation Status](./implementation-status.md) — checked-off implementation
+   work and remaining tasks.
+12. [Post-MVP Roadmap](./11-post-mvp-roadmap.md) — connectors, AI features, scale-out.
+13. [Suggested Repository Structure](./12-repo-structure.md) — application monorepo
     layout and target wiki repo layout.
-13. [Recommended Technology Stack](./13-tech-stack.md) — backend, frontend, extension,
+14. [Recommended Technology Stack](./13-tech-stack.md) — backend, frontend, extension,
     infra, and tooling choices with rationale.
-14. [Sequence Diagrams](./14-sequence-diagrams.md) — major workflows end to end.
-15. [Risk Analysis & Mitigation Plan](./15-risk-analysis.md) — scored risks across
+15. [Sequence Diagrams](./14-sequence-diagrams.md) — major workflows end to end.
+16. [Risk Analysis & Mitigation Plan](./15-risk-analysis.md) — scored risks across
     product, technical, Graph integration, security, and operational dimensions.
 
 ## Status
 
-Design phase complete. No application code has been generated yet, per the brief's
-instruction to focus on design before implementation. Next step: begin
-[MVP Roadmap](./10-mvp-roadmap.md) Phase 0 (foundations/scaffolding).
+Design phase complete. Backend implementation has begun; use the
+[Implementation Status](./implementation-status.md) checklist for current progress
+and the [MVP Roadmap](./10-mvp-roadmap.md) for the intended sequence.
