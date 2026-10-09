@@ -72,6 +72,60 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             )
         return {"id": item_id, "submission_id": submission_id, "status": "inbox"}
 
+    @app.get("/api/items")
+    def list_items(status: str | None = None) -> list[dict[str, object]]:
+        query = """
+            SELECT items.id, items.title, items.status, source_submissions.source_type,
+                   source_submissions.source_ref, items.created_at
+            FROM items
+            JOIN source_submissions ON source_submissions.id = items.submission_id
+        """
+        parameters: dict[str, str] = {}
+        if status is not None:
+            query += " WHERE items.status = :status"
+            parameters["status"] = status
+        query += " ORDER BY items.created_at DESC"
+
+        with engine.connect() as connection:
+            rows = connection.execute(text(query), parameters).mappings().all()
+        return [dict(row) for row in rows]
+
+    @app.get("/api/items/{item_id}")
+    def get_item(item_id: str) -> dict[str, object]:
+        with engine.connect() as connection:
+            item = connection.execute(
+                text(
+                    """
+                    SELECT items.id, items.submission_id, items.title, items.status,
+                           items.markdown_final, items.created_at,
+                           source_submissions.source_type, source_submissions.source_ref,
+                           source_submissions.captured_at
+                    FROM items
+                    JOIN source_submissions ON source_submissions.id = items.submission_id
+                    WHERE items.id = :item_id
+                    """
+                ),
+                {"item_id": item_id},
+            ).mappings().first()
+            if item is None:
+                raise HTTPException(status_code=404, detail="Item not found")
+
+            attachments = connection.execute(
+                text(
+                    """
+                    SELECT id, filename, mime_type, storage_path, size_bytes, created_at
+                    FROM attachments
+                    WHERE item_id = :item_id
+                    ORDER BY created_at
+                    """
+                ),
+                {"item_id": item_id},
+            ).mappings().all()
+
+        result = dict(item)
+        result["attachments"] = [dict(attachment) for attachment in attachments]
+        return result
+
     @app.post("/api/items/upload", status_code=201)
     async def upload_item(
         file: UploadFile = File(...),

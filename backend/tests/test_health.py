@@ -35,6 +35,31 @@ async def test_capture_creates_inbox_item(client: httpx.AsyncClient) -> None:
     assert response.json()["id"]
     assert response.json()["submission_id"]
 
+    item_id = response.json()["id"]
+    detail = await client.get(f"/api/items/{item_id}")
+    assert detail.status_code == 200
+    assert detail.json()["title"] == "Requirements"
+    assert detail.json()["source_type"] == "file"
+
+
+async def test_items_can_be_filtered_by_status(client: httpx.AsyncClient) -> None:
+    await client.post(
+        "/api/items",
+        json={"title": "Inbox item", "source_type": "manual"},
+    )
+
+    response = await client.get("/api/items?status=inbox")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["title"] == "Inbox item"
+
+
+async def test_missing_item_returns_not_found(client: httpx.AsyncClient) -> None:
+    response = await client.get("/api/items/missing")
+
+    assert response.status_code == 404
+
 
 async def test_upload_stores_raw_file_as_inbox_item(client: httpx.AsyncClient, tmp_path) -> None:
     response = await client.post(
