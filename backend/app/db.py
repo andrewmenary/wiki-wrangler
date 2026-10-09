@@ -12,7 +12,9 @@ def create_database_engine(database_url: str) -> Engine:
 
 def initialize_database(engine: Engine) -> None:
     with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE IF NOT EXISTS schema_info (version INTEGER NOT NULL)"))
+        connection.execute(
+            text("CREATE TABLE IF NOT EXISTS schema_info (version INTEGER NOT NULL)")
+        )
         connection.execute(text("PRAGMA journal_mode=WAL"))
         if connection.execute(text("SELECT COUNT(*) FROM schema_info")).scalar_one() == 0:
             connection.execute(text("INSERT INTO schema_info (version) VALUES (1)"))

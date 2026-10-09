@@ -1,14 +1,22 @@
-from contextlib import asynccontextmanager
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from app.db import create_database_engine, database_check, database_url_for_path, initialize_database
+from app.converters.html import html_to_markdown
 from app.converters.text import convert_to_markdown
+from app.db import (
+    create_database_engine,
+    database_check,
+    database_url_for_path,
+    initialize_database,
+)
 
 
 class CaptureRequest(BaseModel):
@@ -20,12 +28,15 @@ class CaptureRequest(BaseModel):
 
 ALLOWED_UPLOAD_EXTENSIONS = {".csv", ".docx", ".md", ".pdf", ".pptx", ".txt", ".xlsx"}
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+MAX_URL_SIZE = 10 * 1024 * 1024
 
 
 def create_app(database_url: str | None = None, storage_path: Path | None = None) -> FastAPI:
     resolved_url = database_url or os.getenv("WIKI_WRANGLER_DATABASE_URL")
     if resolved_url is None:
-        resolved_url = database_url_for_path(Path(__file__).resolve().parents[2] / "data" / "wiki-wrangler.sqlite3")
+        resolved_url = database_url_for_path(
+            Path(__file__).resolve().parents[2] / "data" / "wiki-wrangler.sqlite3"
+        )
     engine = create_database_engine(resolved_url)
     initialize_database(engine)
     storage_root = storage_path or Path(os.getenv("WIKI_WRANGLER_STORAGE_PATH", "data/storage"))
@@ -55,7 +66,11 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     VALUES (:id, :source_type, :source_ref)
                     """
                 ),
-                {"id": submission_id, "source_type": request.source_type, "source_ref": request.source_ref},
+                {
+                    "id": submission_id,
+                    "source_type": request.source_type,
+                    "source_ref": request.source_ref,
+                },
             )
             connection.execute(
                 text(
@@ -176,7 +191,8 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 connection.execute(
                     text("""
                         UPDATE conversion_runs
-                        SET status = 'failed', error_message = :error, finished_at = CURRENT_TIMESTAMP
+                        SET status = 'failed', error_message = :error,
+                            finished_at = CURRENT_TIMESTAMP
                         WHERE id = :id
                         """),
                     {"id": run_id, "error": conversion_error},
@@ -185,7 +201,8 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 connection.execute(
                     text("""
                         UPDATE items
-                        SET status = 'draft', markdown_generated = :markdown, markdown_final = :markdown
+                        SET status = 'draft', markdown_generated = :markdown,
+                            markdown_final = :markdown
                         WHERE id = :item_id
                         """),
                     {"item_id": item_id, "markdown": markdown},
@@ -244,12 +261,17 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                         VALUES (:id, :submission_id, :title)
                         """
                     ),
-                    {"id": item_id, "submission_id": submission_id, "title": title or Path(filename).stem},
+                    {
+                        "id": item_id,
+                        "submission_id": submission_id,
+                        "title": title or Path(filename).stem,
+                    },
                 )
                 connection.execute(
                     text(
                         """
-                        INSERT INTO attachments (id, item_id, filename, mime_type, storage_path, size_bytes)
+                        INSERT INTO attachments
+                            (id, item_id, filename, mime_type, storage_path, size_bytes)
                         VALUES (:id, :item_id, :filename, :mime_type, :storage_path, :size_bytes)
                         """
                     ),
@@ -272,6 +294,82 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             "submission_id": submission_id,
             "attachment_id": attachment_id,
             "status": "inbox",
+            "size_bytes": len(content),
+        }
+
+    @app.post("/api/items/url", status_code=201)
+    def capture_url(url: str, title: str | None = None) -> dict[str, str | int]:
+        if not url.startswith(("http://", "https://")):
+            raise HTTPException(status_code=422, detail="URL must use http or https")
+
+        try:
+            request = Request(url, headers={"User-Agent": "Wiki-Wrangler/0.1"})
+            with urlopen(request, timeout=10) as response:
+                content = response.read(MAX_URL_SIZE + 1)
+        except (HTTPError, URLError, TimeoutError, OSError) as error:
+            raise HTTPException(status_code=422, detail=f"Unable to fetch URL: {error}") from error
+
+        if len(content) > MAX_URL_SIZE:
+            raise HTTPException(status_code=413, detail="URL response exceeds the 10 MB limit")
+        try:
+            extracted_title, markdown = html_to_markdown(content)
+        except (UnicodeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+        submission_id = str(uuid4())
+        item_id = str(uuid4())
+        attachment_id = str(uuid4())
+        item_directory = storage_root / item_id
+        item_directory.mkdir(parents=True, exist_ok=False)
+        stored_path = item_directory / "source.html"
+        stored_path.write_bytes(content)
+
+        try:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("""
+                        INSERT INTO source_submissions (id, source_type, source_ref)
+                        VALUES (:id, 'url', :source_ref)
+                        """),
+                    {"id": submission_id, "source_ref": url},
+                )
+                connection.execute(
+                    text("""
+                        INSERT INTO items
+                            (id, submission_id, title, status, markdown_generated, markdown_final)
+                        VALUES (:id, :submission_id, :title, 'draft', :markdown, :markdown)
+                        """),
+                    {
+                        "id": item_id,
+                        "submission_id": submission_id,
+                        "title": title or extracted_title or url,
+                        "markdown": markdown,
+                    },
+                )
+                connection.execute(
+                    text("""
+                        INSERT INTO attachments
+                            (id, item_id, filename, mime_type, storage_path, size_bytes)
+                        VALUES
+                            (:id, :item_id, 'source.html', 'text/html', :storage_path, :size_bytes)
+                        """),
+                    {
+                        "id": attachment_id,
+                        "item_id": item_id,
+                        "storage_path": str(stored_path.relative_to(storage_root)),
+                        "size_bytes": len(content),
+                    },
+                )
+        except Exception:
+            stored_path.unlink(missing_ok=True)
+            item_directory.rmdir()
+            raise
+
+        return {
+            "id": item_id,
+            "submission_id": submission_id,
+            "attachment_id": attachment_id,
+            "status": "draft",
             "size_bytes": len(content),
         }
 

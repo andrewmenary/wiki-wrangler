@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 
+from app import main
 from app.main import create_app
 
 
@@ -115,3 +116,34 @@ async def test_unsupported_conversion_marks_item_as_error(client: httpx.AsyncCli
     assert response.status_code == 422
     detail = await client.get(f"/api/items/{item_id}")
     assert detail.json()["status"] == "error"
+
+
+async def test_url_capture_extracts_text_and_preserves_source(
+    client: httpx.AsyncClient, monkeypatch
+) -> None:
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, limit: int) -> bytes:
+            return (
+                b"<html><head><title>Useful page</title><script>ignored()</script>"
+                b"</head><body><h1>Heading</h1><p>Body text</p></body></html>"
+            )
+
+    monkeypatch.setattr(main, "urlopen", lambda request, timeout: FakeResponse())
+
+    response = await client.post(
+        "/api/items/url",
+        params={"url": "https://example.com/page"},
+    )
+
+    assert response.status_code == 201
+    item = (await client.get(f"/api/items/{response.json()['id']}")).json()
+    assert item["status"] == "draft"
+    assert item["title"] == "Useful page"
+    assert item["markdown_final"] == "Heading\n\nBody text"
+    assert item["attachments"][0]["filename"] == "source.html"
