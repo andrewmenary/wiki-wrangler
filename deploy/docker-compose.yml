@@ -1,5 +1,8 @@
+name: wiki-wrangler
+
 services:
   api:
+    image: wiki-wrangler-api:latest
     build:
       context: ../backend
     ports:
@@ -9,3 +12,4 @@ services:
 
 volumes:
   wiki-wrangler-data:
+    name: wiki-wrangler-data
