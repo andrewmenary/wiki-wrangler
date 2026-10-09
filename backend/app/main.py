@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.db import create_database_engine, database_check, database_url_for_path, initialize_database
+from app.converters.text import convert_to_markdown
 
 
 class CaptureRequest(BaseModel):
@@ -97,7 +98,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 text(
                     """
                     SELECT items.id, items.submission_id, items.title, items.status,
-                           items.markdown_final, items.created_at,
+                              items.markdown_generated, items.markdown_final, items.created_at,
                            source_submissions.source_type, source_submissions.source_ref,
                            source_submissions.captured_at
                     FROM items
@@ -125,6 +126,83 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         result = dict(item)
         result["attachments"] = [dict(attachment) for attachment in attachments]
         return result
+
+    @app.post("/api/items/{item_id}/convert")
+    def convert_item(item_id: str) -> dict[str, object]:
+        run_id = str(uuid4())
+        conversion_error: str | None = None
+        with engine.begin() as connection:
+            item = connection.execute(
+                text("SELECT id, status FROM items WHERE id = :item_id"),
+                {"item_id": item_id},
+            ).mappings().first()
+            if item is None:
+                raise HTTPException(status_code=404, detail="Item not found")
+
+            attachment = connection.execute(
+                text(
+                    """
+                    SELECT filename, storage_path
+                    FROM attachments
+                    WHERE item_id = :item_id
+                    ORDER BY created_at
+                    LIMIT 1
+                    """
+                ),
+                {"item_id": item_id},
+            ).mappings().first()
+            if attachment is None:
+                raise HTTPException(status_code=422, detail="Item has no uploaded attachment")
+
+            connection.execute(
+                text("""
+                    INSERT INTO conversion_runs (id, item_id, tool, status)
+                    VALUES (:id, :item_id, 'builtin-text', 'running')
+                    """),
+                {"id": run_id, "item_id": item_id},
+            )
+
+            try:
+                content = (storage_root / attachment["storage_path"]).read_bytes()
+                markdown = convert_to_markdown(attachment["filename"], content)
+            except (OSError, ValueError, UnicodeError) as error:
+                conversion_error = str(error)
+                connection.execute(
+                    text("""
+                        UPDATE items SET status = 'error' WHERE id = :item_id
+                        """),
+                    {"item_id": item_id},
+                )
+                connection.execute(
+                    text("""
+                        UPDATE conversion_runs
+                        SET status = 'failed', error_message = :error, finished_at = CURRENT_TIMESTAMP
+                        WHERE id = :id
+                        """),
+                    {"id": run_id, "error": conversion_error},
+                )
+            else:
+                connection.execute(
+                    text("""
+                        UPDATE items
+                        SET status = 'draft', markdown_generated = :markdown, markdown_final = :markdown
+                        WHERE id = :item_id
+                        """),
+                    {"item_id": item_id, "markdown": markdown},
+                )
+                connection.execute(
+                    text("""
+                        UPDATE conversion_runs
+                        SET status = 'succeeded', finished_at = CURRENT_TIMESTAMP
+                        WHERE id = :id
+                        """),
+                    {"id": run_id},
+                )
+
+        if conversion_error is not None:
+            raise HTTPException(status_code=422, detail=conversion_error)
+
+        return {"id": item_id, "status": "draft", "conversion_run_id": run_id}
 
     @app.post("/api/items/upload", status_code=201)
     async def upload_item(

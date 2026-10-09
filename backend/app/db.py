@@ -57,6 +57,27 @@ def initialize_database(engine: Engine) -> None:
                 """
             )
         )
+        item_columns = {
+            row[1] for row in connection.execute(text("PRAGMA table_info(items)")).all()
+        }
+        if "markdown_generated" not in item_columns:
+            connection.execute(text("ALTER TABLE items ADD COLUMN markdown_generated TEXT"))
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS conversion_runs (
+                    id TEXT PRIMARY KEY,
+                    item_id TEXT NOT NULL REFERENCES items(id),
+                    tool TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    output_path TEXT,
+                    error_message TEXT,
+                    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    finished_at TEXT
+                )
+                """
+            )
+        )
 
 
 def database_url_for_path(database_path: Path) -> str:

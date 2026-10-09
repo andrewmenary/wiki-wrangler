@@ -84,3 +84,34 @@ async def test_upload_rejects_unsupported_file_type(client: httpx.AsyncClient) -
     )
 
     assert response.status_code == 415
+
+
+async def test_text_upload_can_be_converted_to_draft(client: httpx.AsyncClient) -> None:
+    upload = await client.post(
+        "/api/items/upload",
+        files={"file": ("notes.txt", b"# Meeting notes", "text/plain")},
+    )
+    item_id = upload.json()["id"]
+
+    response = await client.post(f"/api/items/{item_id}/convert")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "draft"
+    detail = await client.get(f"/api/items/{item_id}")
+    assert detail.json()["status"] == "draft"
+    assert detail.json()["markdown_generated"] == "# Meeting notes"
+    assert detail.json()["markdown_final"] == "# Meeting notes"
+
+
+async def test_unsupported_conversion_marks_item_as_error(client: httpx.AsyncClient) -> None:
+    upload = await client.post(
+        "/api/items/upload",
+        files={"file": ("notes.csv", b"name,value\nitem,1", "text/csv")},
+    )
+    item_id = upload.json()["id"]
+
+    response = await client.post(f"/api/items/{item_id}/convert")
+
+    assert response.status_code == 422
+    detail = await client.get(f"/api/items/{item_id}")
+    assert detail.json()["status"] == "error"
