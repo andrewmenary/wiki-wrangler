@@ -20,9 +20,9 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] SQLite database initialization
   - [ ] Alembic migration history
 - [ ] Local authentication
-  - [ ] Admin registration
-  - [ ] Login
-  - [ ] Session cookie
+  - [x] Admin registration endpoint
+  - [x] Login endpoint
+  - [x] Session cookie
   - [ ] Login screen
 - [ ] CI pipeline
   - [x] Lint workflow configured and passing on GitHub

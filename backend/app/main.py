@@ -1,14 +1,16 @@
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Cookie, FastAPI, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from app.auth import create_session_token, hash_password, hash_session_token, verify_password
 from app.converters.html import html_to_markdown
 from app.converters.text import convert_to_markdown
 from app.db import (
@@ -26,9 +28,22 @@ class CaptureRequest(BaseModel):
     markdown: str | None = None
 
 
+class RegisterRequest(BaseModel):
+    display_name: str
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
 ALLOWED_UPLOAD_EXTENSIONS = {".csv", ".docx", ".md", ".pdf", ".pptx", ".txt", ".xlsx"}
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 MAX_URL_SIZE = 10 * 1024 * 1024
+SESSION_COOKIE = "wiki_wrangler_session"
+SESSION_LIFETIME = timedelta(hours=12)
 
 
 def create_app(database_url: str | None = None, storage_path: Path | None = None) -> FastAPI:
@@ -53,6 +68,129 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "database": "ok" if database_check(engine) else "error"}
+
+    @app.post("/api/auth/register", status_code=201)
+    def register(request: RegisterRequest, response: Response) -> dict[str, object]:
+        display_name = request.display_name.strip()
+        email = request.email.strip().lower()
+        if not display_name or "@" not in email or len(request.password) < 8:
+            raise HTTPException(status_code=422, detail="Invalid registration details")
+
+        user_id = str(uuid4())
+        token = create_session_token()
+        session_id = str(uuid4())
+        expires_at = datetime.now(timezone.utc) + SESSION_LIFETIME
+        with engine.begin() as connection:
+            if connection.execute(text("SELECT 1 FROM users LIMIT 1")).first() is not None:
+                role = "curator"
+            else:
+                role = "admin"
+            try:
+                connection.execute(
+                    text("""
+                        INSERT INTO users (id, display_name, email, password_hash, role)
+                        VALUES (:id, :display_name, :email, :password_hash, :role)
+                        """),
+                    {
+                        "id": user_id,
+                        "display_name": display_name,
+                        "email": email,
+                        "password_hash": hash_password(request.password),
+                        "role": role,
+                    },
+                )
+            except Exception as error:
+                if "UNIQUE constraint failed: users.email" in str(error):
+                    raise HTTPException(
+                        status_code=409, detail="Email is already registered"
+                    ) from error
+                raise
+            connection.execute(
+                text("""
+                    INSERT INTO sessions (id, user_id, token_hash, expires_at)
+                    VALUES (:id, :user_id, :token_hash, :expires_at)
+                    """),
+                {
+                    "id": session_id,
+                    "user_id": user_id,
+                    "token_hash": hash_session_token(token),
+                    "expires_at": expires_at.isoformat(),
+                },
+            )
+        response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=43200)
+        return {"id": user_id, "display_name": display_name, "email": email, "role": role}
+
+    @app.post("/api/auth/login")
+    def login(request: LoginRequest, response: Response) -> dict[str, object]:
+        email = request.email.strip().lower()
+        with engine.connect() as connection:
+            user = connection.execute(
+                text("""
+                    SELECT id, display_name, email, password_hash, role
+                    FROM users
+                    WHERE email = :email AND auth_provider = 'local' AND is_active = 1
+                    """),
+                {"email": email},
+            ).mappings().first()
+        if user is None or not verify_password(request.password, user["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        token = create_session_token()
+        expires_at = datetime.now(timezone.utc) + SESSION_LIFETIME
+        with engine.begin() as connection:
+            connection.execute(
+                text("""
+                    INSERT INTO sessions (id, user_id, token_hash, expires_at)
+                    VALUES (:id, :user_id, :token_hash, :expires_at)
+                    """),
+                {
+                    "id": str(uuid4()),
+                    "user_id": user["id"],
+                    "token_hash": hash_session_token(token),
+                    "expires_at": expires_at.isoformat(),
+                },
+            )
+        response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=43200)
+        return {
+            "id": user["id"],
+            "display_name": user["display_name"],
+            "email": user["email"],
+            "role": user["role"],
+        }
+
+    @app.get("/api/auth/me")
+    def current_user(
+        session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+    ) -> dict[str, object]:
+        if not session:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        with engine.connect() as connection:
+            user = connection.execute(
+                text("""
+                    SELECT users.id, users.display_name, users.email, users.role
+                    FROM sessions JOIN users ON users.id = sessions.user_id
+                    WHERE sessions.token_hash = :token_hash
+                      AND sessions.expires_at > CURRENT_TIMESTAMP
+                      AND users.is_active = 1
+                    """),
+                {"token_hash": hash_session_token(session)},
+            ).mappings().first()
+        if user is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return dict(user)
+
+    @app.post("/api/auth/logout", status_code=204)
+    def logout(
+        response: Response,
+        session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+    ) -> None:
+        if session:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("DELETE FROM sessions WHERE token_hash = :token_hash"),
+                    {"token_hash": hash_session_token(session)},
+                )
+        response.delete_cookie(SESSION_COOKIE)
 
     @app.post("/api/items", status_code=201)
     def capture_item(request: CaptureRequest) -> dict[str, str]:

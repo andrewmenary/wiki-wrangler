@@ -25,6 +25,52 @@ async def test_health_reports_database_status(client: httpx.AsyncClient) -> None
     assert response.json() == {"status": "ok", "database": "ok"}
 
 
+async def test_first_user_can_register_and_use_session_cookie(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/auth/register",
+        json={
+            "display_name": "Admin User",
+            "email": "ADMIN@example.com",
+            "password": "correct horse",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["role"] == "admin"
+    assert "wiki_wrangler_session" in response.cookies
+
+    current_user = await client.get("/api/auth/me")
+    assert current_user.status_code == 200
+    assert current_user.json()["email"] == "admin@example.com"
+
+    logout = await client.post("/api/auth/logout")
+    assert logout.status_code == 204
+    assert (await client.get("/api/auth/me")).status_code == 401
+
+
+async def test_registered_user_can_log_in_but_invalid_password_is_rejected(
+    client: httpx.AsyncClient,
+) -> None:
+    await client.post(
+        "/api/auth/register",
+        json={"display_name": "Curator", "email": "curator@example.com", "password": "password123"},
+    )
+    client.cookies.clear()
+
+    invalid = await client.post(
+        "/api/auth/login",
+        json={"email": "curator@example.com", "password": "wrong-password"},
+    )
+    assert invalid.status_code == 401
+
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": "curator@example.com", "password": "password123"},
+    )
+    assert login.status_code == 200
+    assert login.json()["role"] == "admin"
+
+
 async def test_capture_creates_inbox_item(client: httpx.AsyncClient) -> None:
     response = await client.post(
         "/api/items",
