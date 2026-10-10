@@ -167,8 +167,14 @@ success/failure, error). An Item can have multiple ConversionRuns (e.g. retried 
 a different tool, or re-run after a Docling upgrade).
 
 ### Category
-A node in the curation taxonomy, mapped to a folder path under `curated/` in the
-target repository. Hierarchical (supports nested categories).
+A node in the curation taxonomy. `name` is the human-friendly display label (for
+example, `Wiki Wrangler`), while the machine-facing path uses a portable lowercase
+hyphenated slug (for example, `wiki-wrangler`). The stored canonical path is relative
+to a repository's configured curated root and is derived from the parent hierarchy
+(for example, `projects/wiki-wrangler/backend`). The UI should suggest a slug from the
+name, allow an explicit override, and validate the fixed slug convention. Hierarchical
+categories support nested folders without making categories responsible for repository
+routing.
 
 ### Tag
 A free-form label, many-to-many with Item, used for cross-cutting discovery
@@ -181,10 +187,14 @@ after an edit creates a new commit but updates the same Publication record (keep
 `commit_sha` as the latest).
 
 ### Repository
-A configured Git target (remote URL, default branch, publish mode, which credential to
-use). Wiki Wrangler can be configured with more than one Repository (e.g. a work KB and
-a personal KB) though MVP ships with single-repository configuration as the default
-path.
+A configured Git target (remote URL, default branch, publish mode, credential, and raw
+and curated root folder names). Roots default to `raw` and `curated`, and are resolved
+per repository. Wiki Wrangler can be configured with more than one Repository (e.g. a
+work KB and a personal KB), though MVP ships with a single default repository.
+
+An Item has one category assignment, but it may have an intentional Publication for
+more than one Repository. Category assignment and repository destination are separate
+decisions; multiple categories do not implicitly publish an item to multiple repos.
 
 ### AuditEvent
 An immutable log row for any state-changing action (capture, edit, approve, reject,

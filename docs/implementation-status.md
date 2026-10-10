@@ -4,6 +4,17 @@ This checklist tracks implementation against the [MVP Roadmap](./10-mvp-roadmap.
 It reflects the current repository state; checked items have working code or verified
 configuration, while partial items are intentionally called out in the notes.
 
+## Publishing Design Decisions
+
+- Category paths are relative to a repository's curated root; parent categories define
+  the canonical nested path.
+- Category names are human-friendly labels. Machine path segments use a fixed lowercase
+  hyphenated slug convention, with a generated suggestion and validated override.
+- Repository roots default to `raw/` and `curated/` but are configurable per repository.
+- Category assignment and repository destination are separate. An item has one category
+  but may be explicitly published to multiple repositories.
+- Published records retain the resolved raw and curated paths used at publication time.
+
 ## Phase 0 - Foundations
 
 - [ ] Complete repository scaffold from the target structure

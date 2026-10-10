@@ -40,17 +40,22 @@ Markdown draft visible in the Inbox within the performance target in the
 - Status transitions implemented per the
   [Domain Model](./03-domain-model.md) state machine (Draft → Review → Approved /
   Archived).
-- Category management (CRUD, simple hierarchy) in Settings.
+- Category management (CRUD, simple hierarchy) in Settings. Category names are
+  human-friendly labels; machine paths use validated lowercase hyphenated slugs,
+  suggested from the name and combined with the parent path.
 
 **Exit criteria:** A curator can take an uploaded file from Inbox through to Approved
 entirely in the UI, including edits.
 
 ## Phase 3 — Git Publishing (Sprint 5)
 
-- Repository configuration (remote URL, branch, credential, publish mode=direct) in
-  Settings.
-- Publish Worker: clone/pull, write `raw/<source>/...` and `curated/<category>/...`
-  files with front matter, commit with generated message, push.
+- Repository configuration (remote URL, branch, credential, publish mode=direct, raw
+  root, and curated root) in Settings. Roots default to `raw` and `curated`.
+- Publish Worker: clone/pull, resolve the item's category-relative path beneath the
+  configured curated root, write raw and curated files with front matter, commit with
+  a generated message, and push.
+- A single item has one category assignment but may be explicitly published to more
+  than one configured repository; categories do not implicitly select repositories.
 - Publication record + traceability link shown in the UI (commit link).
 - Audit log (capture/approve/publish events) viewable by Admins.
 

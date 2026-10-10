@@ -71,8 +71,8 @@ CREATE TABLE source_submissions (
 -- Taxonomy
 CREATE TABLE categories (
     id              TEXT PRIMARY KEY,
-    name            TEXT NOT NULL,
-    path            TEXT NOT NULL UNIQUE,            -- e.g. 'curated/processes/registration'
+    name            TEXT NOT NULL,                   -- display label, e.g. 'Wiki Wrangler'
+    path            TEXT NOT NULL UNIQUE,            -- canonical relative path, e.g. 'projects/wiki-wrangler'
     parent_id       TEXT REFERENCES categories(id)
 );
 
@@ -145,6 +145,8 @@ CREATE TABLE repositories (
     default_branch  TEXT NOT NULL DEFAULT 'main',
     publish_mode    TEXT NOT NULL DEFAULT 'direct' CHECK (publish_mode IN ('direct','pull_request')),
     credential_ref  TEXT NOT NULL,                    -- key into secrets store
+    raw_root        TEXT NOT NULL DEFAULT 'raw',
+    curated_root    TEXT NOT NULL DEFAULT 'curated',
     is_default      INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );

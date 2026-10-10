@@ -118,7 +118,7 @@ Wiki Wrangler behaves like an **inbox for knowledge**:
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| F25 | Approved items are committed to a configured Git repository under `raw/<source>/...` (original) and `curated/<category>/...` (reviewed) paths. | MVP |
+| F25 | Approved items are committed to a configured Git repository under configurable raw and curated roots (defaulting to `raw/<source>/...` and `curated/<category>/...`) with the original and reviewed content linked. | MVP |
 | F26 | Commit messages are auto-generated from title/source/category and are human-meaningful (e.g. "Add Teams discussion on registration workflow"). | MVP |
 | F27 | Publishing supports direct-commit-to-branch and commit-via-pull-request modes, configurable per repository. | MVP (direct commit); PR mode Post-MVP |
 | F28 | Traceability links are preserved between curated Markdown and its raw source (front matter reference + raw file path). | MVP |

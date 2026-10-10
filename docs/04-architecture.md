@@ -171,7 +171,11 @@ larger document conversions are involved.
 The actual wiki source repository. Wiki Wrangler treats it as an external system it
 writes to via standard Git operations (clone/pull, write files, commit, push, optional
 PR creation via the GitHub API) — never via any non-Git side channel — so the
-repository remains fully usable by any other Git tooling.
+repository remains fully usable by any other Git tooling. Each configured repository
+has `raw_root` and `curated_root` settings, defaulting to `raw` and `curated`. The
+publisher resolves paths as `<raw_root>/<source>/...` and
+`<curated_root>/<category-path>/...`; publication records retain the resolved paths so
+later configuration changes do not rewrite history.
 
 ## 4. Why FastAPI + a Separate Worker Pool (not just FastAPI background tasks)
 
