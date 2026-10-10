@@ -230,6 +230,11 @@ async def test_item_can_be_reviewed_edited_and_approved(
     assert detail.json()["summary"] == "A concise summary"
     assert detail.json()["tags"] == ["meeting", "planning"]
 
+    listed = await authenticated_client.get("/api/items")
+    listed_item = next(item for item in listed.json() if item["id"] == item_id)
+    assert listed_item["tags"] == ["meeting", "planning"]
+    assert "tags_json" not in listed_item
+
 
 async def test_categories_support_hierarchy_and_item_assignment(
     authenticated_client: httpx.AsyncClient,

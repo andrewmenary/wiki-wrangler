@@ -426,7 +426,12 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
 
         with engine.connect() as connection:
             rows = connection.execute(text(query), parameters).mappings().all()
-        return [dict(row) for row in rows]
+        items = []
+        for row in rows:
+            item = dict(row)
+            item["tags"] = json.loads(item.pop("tags_json") or "[]")
+            items.append(item)
+        return items
 
     @app.get("/api/items/{item_id}", dependencies=[Depends(require_session)])
     def get_item(item_id: str) -> dict[str, object]:
