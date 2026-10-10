@@ -147,11 +147,14 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   await page.locator("#review-tags").fill("operations, runbook, operations");
   await page.locator("#review-category").selectOption(categoryBody.id);
   const markdownSource = page.getByRole("textbox", { name: "Final Markdown draft" });
-  await markdownSource.fill("# Restart the service\n\nFollow the maintenance window.");
+  const finalMarkdown = "# Restart the service\n\n- [x] Confirm configuration\n- [ ] Publish the change\n\n| Step | Owner |\n| --- | --- |\n| Restart | Ops |";
+  await markdownSource.fill(finalMarkdown);
   await page.getByRole("button", { name: "Preview" }).click();
   await expect(page.locator("#review-markdown-preview h1")).toHaveText("Restart the service");
+  await expect(page.locator("#review-markdown-preview table")).toBeVisible();
+  await expect(page.locator("#review-markdown-preview input[type=checkbox]")).toHaveCount(2);
   await page.getByRole("button", { name: "Source" }).click();
-  await expect(markdownSource).toHaveValue("# Restart the service\n\nFollow the maintenance window.");
+  await expect(markdownSource).toHaveValue(finalMarkdown);
   await page.getByRole("button", { name: "Save changes" }).click();
 
   await expect(page.locator("#review-message")).toHaveText("Changes saved.");
@@ -169,7 +172,7 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   expect(detailBody.summary).toBe("Steps for restarting the service.");
   expect(detailBody.tags).toEqual(["operations", "runbook"]);
   expect(detailBody.category_id).toBe(categoryBody.id);
-  expect(detailBody.markdown_final).toBe("# Restart the service\n\nFollow the maintenance window.");
+  expect(detailBody.markdown_final).toBe(finalMarkdown);
 });
 
 test("an Inbox capture can be discarded without deleting its history", async ({ page }) => {
