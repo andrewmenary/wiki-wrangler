@@ -64,6 +64,18 @@ def initialize_database(engine: Engine) -> None:
         connection.execute(
             text(
                 """
+                CREATE TABLE IF NOT EXISTS categories (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    path TEXT NOT NULL UNIQUE,
+                    parent_id TEXT REFERENCES categories(id)
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
                 CREATE TABLE IF NOT EXISTS items (
                     id TEXT PRIMARY KEY,
                     submission_id TEXT NOT NULL REFERENCES source_submissions(id),
@@ -101,6 +113,8 @@ def initialize_database(engine: Engine) -> None:
             connection.execute(
                 text("ALTER TABLE items ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'")
             )
+        if "category_id" not in item_columns:
+            connection.execute(text("ALTER TABLE items ADD COLUMN category_id TEXT"))
         connection.execute(
             text(
                 """

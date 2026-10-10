@@ -182,6 +182,42 @@ async def test_item_can_be_reviewed_edited_and_approved(client: httpx.AsyncClien
     assert detail.json()["tags"] == ["meeting", "planning"]
 
 
+async def test_categories_support_hierarchy_and_item_assignment(client: httpx.AsyncClient) -> None:
+    parent = await client.post(
+        "/api/categories",
+        json={"name": "Processes", "path": "processes"},
+    )
+    assert parent.status_code == 201
+    child = await client.post(
+        "/api/categories",
+        json={
+            "name": "Onboarding",
+            "path": "processes/onboarding",
+            "parent_id": parent.json()["id"],
+        },
+    )
+    assert child.status_code == 201
+
+    capture = await client.post(
+        "/api/items",
+        json={"title": "Guide", "source_type": "manual", "markdown": "Text"},
+    )
+    item_id = capture.json()["id"]
+    assignment = await client.patch(
+        f"/api/items/{item_id}",
+        json={"category_id": child.json()["id"]},
+    )
+    assert assignment.status_code == 200
+    detail = await client.get(f"/api/items/{item_id}")
+    assert detail.json()["category_path"] == "processes/onboarding"
+
+    duplicate = await client.post(
+        "/api/categories",
+        json={"name": "Other", "path": "processes/onboarding"},
+    )
+    assert duplicate.status_code == 409
+
+
 async def test_invalid_item_transition_is_rejected(client: httpx.AsyncClient) -> None:
     capture = await client.post(
         "/api/items",

@@ -45,8 +45,15 @@ class ItemUpdateRequest(BaseModel):
     title: str | None = None
     summary: str | None = None
     tags: list[str] | None = None
+    category_id: str | None = None
     markdown_final: str | None = None
     status: str | None = None
+
+
+class CategoryRequest(BaseModel):
+    name: str
+    path: str
+    parent_id: str | None = None
 
 
 ALLOWED_UPLOAD_EXTENSIONS = {".csv", ".docx", ".md", ".pdf", ".pptx", ".txt", ".xlsx"}
@@ -202,6 +209,75 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 )
         response.delete_cookie(SESSION_COOKIE)
 
+    @app.get("/api/categories")
+    def list_categories() -> list[dict[str, object]]:
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text("""
+                    SELECT id, name, path, parent_id
+                    FROM categories
+                    ORDER BY path
+                    """)
+            ).mappings().all()
+        return [dict(row) for row in rows]
+
+    @app.post("/api/categories", status_code=201)
+    def create_category(request: CategoryRequest) -> dict[str, object]:
+        name = request.name.strip()
+        path = request.path.strip().strip("/")
+        if not name or not path:
+            raise HTTPException(status_code=422, detail="Category name and path are required")
+
+        category_id = str(uuid4())
+        with engine.begin() as connection:
+            if request.parent_id is not None:
+                parent = connection.execute(
+                    text("SELECT id FROM categories WHERE id = :parent_id"),
+                    {"parent_id": request.parent_id},
+                ).first()
+                if parent is None:
+                    raise HTTPException(status_code=422, detail="Parent category not found")
+            try:
+                connection.execute(
+                    text("""
+                        INSERT INTO categories (id, name, path, parent_id)
+                        VALUES (:id, :name, :path, :parent_id)
+                        """),
+                    {
+                        "id": category_id,
+                        "name": name,
+                        "path": path,
+                        "parent_id": request.parent_id,
+                    },
+                )
+            except Exception as error:
+                if "UNIQUE constraint failed: categories.path" in str(error):
+                    raise HTTPException(
+                        status_code=409, detail="Category path already exists"
+                    ) from error
+                raise
+        return {"id": category_id, "name": name, "path": path, "parent_id": request.parent_id}
+
+    @app.delete("/api/categories/{category_id}", status_code=204)
+    def delete_category(category_id: str) -> None:
+        with engine.begin() as connection:
+            category = connection.execute(
+                text("SELECT id FROM categories WHERE id = :category_id"),
+                {"category_id": category_id},
+            ).first()
+            if category is None:
+                raise HTTPException(status_code=404, detail="Category not found")
+            assigned = connection.execute(
+                text("SELECT 1 FROM items WHERE category_id = :category_id LIMIT 1"),
+                {"category_id": category_id},
+            ).first()
+            if assigned is not None:
+                raise HTTPException(status_code=409, detail="Category is assigned to an item")
+            connection.execute(
+                text("DELETE FROM categories WHERE id = :category_id"),
+                {"category_id": category_id},
+            )
+
     @app.post("/api/items", status_code=201)
     def capture_item(request: CaptureRequest) -> dict[str, str]:
         submission_id = str(uuid4())
@@ -263,11 +339,14 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     """
                     SELECT items.id, items.submission_id, items.title, items.status,
                         items.markdown_generated, items.markdown_final,
-                        items.summary, items.tags_json, items.created_at,
+                        items.summary, items.tags_json, items.category_id,
+                        categories.name AS category_name, categories.path AS category_path,
+                        items.created_at,
                         source_submissions.source_type, source_submissions.source_ref,
                         source_submissions.captured_at
                     FROM items
                     JOIN source_submissions ON source_submissions.id = items.submission_id
+                    LEFT JOIN categories ON categories.id = items.category_id
                     WHERE items.id = :item_id
                     """
                 ),
@@ -299,6 +378,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             request.title is None
             and request.summary is None
             and request.tags is None
+            and request.category_id is None
             and request.markdown_final is None
             and request.status is None
         ):
@@ -327,6 +407,13 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     status_code=409,
                     detail=f"Cannot transition item from {current_status} to {target_status}",
                 )
+            if request.category_id is not None:
+                category = connection.execute(
+                    text("SELECT id FROM categories WHERE id = :category_id"),
+                    {"category_id": request.category_id},
+                ).first()
+                if category is None:
+                    raise HTTPException(status_code=422, detail="Category not found")
 
             connection.execute(
                 text("""
@@ -334,6 +421,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     SET title = COALESCE(:title, title),
                         summary = COALESCE(:summary, summary),
                         tags_json = COALESCE(:tags_json, tags_json),
+                        category_id = COALESCE(:category_id, category_id),
                         markdown_final = COALESCE(:markdown_final, markdown_final),
                         status = COALESCE(:status, status)
                     WHERE id = :item_id
@@ -348,6 +436,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     )
                     if request.tags is not None
                     else None,
+                    "category_id": request.category_id,
                     "markdown_final": request.markdown_final,
                     "status": target_status.value if target_status is not None else None,
                 },

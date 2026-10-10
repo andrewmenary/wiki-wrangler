@@ -57,7 +57,8 @@ configuration, while partial items are intentionally called out in the notes.
 - [x] Summary and tags metadata fields
 - [x] Status transition API
 - [x] Domain-level status transition rules
-- [ ] Category CRUD and hierarchy
+- [x] Category CRUD and hierarchy API
+- [ ] Category management Settings UI
 
 ## Phase 3 - Git Publishing
 
