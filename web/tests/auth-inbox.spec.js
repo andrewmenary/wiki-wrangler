@@ -122,9 +122,11 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   );
   const item = page.locator(".item").filter({ hasText: "Service restart runbook" });
   await expect(item).toBeVisible();
+  const itemId = await item.getByRole("button").getAttribute("data-item-id");
   await item.getByRole("button").click();
 
   await expect(page.locator("#review-title")).toHaveText("Service restart runbook");
+  await page.getByLabel("Title", { exact: true }).fill("Service restart runbook v2");
   await page.getByLabel("Summary").fill("Steps for restarting the service.");
   await page.getByLabel("Tags").fill("operations, runbook, operations");
   await page.getByLabel("Category").selectOption(categoryBody.id);
@@ -135,12 +137,13 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   await expect(page.getByRole("button", { name: "Approve" })).toBeVisible();
   await page.getByRole("button", { name: "Approve" }).click();
   await expect(page.locator("#review-message")).toHaveText("Approved for publishing.");
-  await expect(item).toContainText("approved");
+  const renamedItem = page.locator(".item").filter({ hasText: "Service restart runbook v2" });
+  await expect(renamedItem).toContainText("approved");
 
-  const itemId = await item.getByRole("button").getAttribute("data-item-id");
   const detail = await page.request.get(`/api/items/${itemId}`);
   expect(detail.status()).toBe(200);
   const detailBody = await detail.json();
+  expect(detailBody.title).toBe("Service restart runbook v2");
   expect(detailBody.status).toBe("approved");
   expect(detailBody.summary).toBe("Steps for restarting the service.");
   expect(detailBody.tags).toEqual(["operations", "runbook"]);

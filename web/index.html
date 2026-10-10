@@ -198,6 +198,10 @@
           <h3 id="review-title"></h3>
           <div class="review-meta">
             <label>
+              Title
+              <input id="review-item-title" type="text">
+            </label>
+            <label>
               Summary
               <input id="review-summary" type="text">
             </label>
@@ -270,6 +274,7 @@
     const captureMessage = document.querySelector("#capture-message");
     const reviewView = document.querySelector("#review-view");
     const reviewTitle = document.querySelector("#review-title");
+    const reviewItemTitle = document.querySelector("#review-item-title");
     const reviewSummary = document.querySelector("#review-summary");
     const reviewTags = document.querySelector("#review-tags");
     const reviewCategory = document.querySelector("#review-category");
@@ -342,6 +347,7 @@
       if (!response.ok) throw new Error("Could not load the item");
       selectedItem = await response.json();
       reviewTitle.textContent = selectedItem.title;
+      reviewItemTitle.value = selectedItem.title;
       reviewSummary.value = selectedItem.summary || "";
       reviewTags.value = (selectedItem.tags || []).join(", ");
       reviewCategory.value = selectedItem.category_id || "";
@@ -377,6 +383,7 @@
       reviewMessage.textContent = "Saving...";
       try {
         const fields = {
+          title: reviewItemTitle.value,
           summary: reviewSummary.value,
           tags: reviewTags.value.split(",").map((tag) => tag.trim()).filter(Boolean),
           category_id: reviewCategory.value || null,
@@ -395,6 +402,7 @@
       reviewMessage.textContent = "Approving...";
       try {
         await updateSelectedItem({
+          title: reviewItemTitle.value,
           summary: reviewSummary.value,
           tags: reviewTags.value.split(",").map((tag) => tag.trim()).filter(Boolean),
           category_id: reviewCategory.value || null,
