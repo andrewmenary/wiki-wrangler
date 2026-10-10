@@ -93,4 +93,6 @@ configuration, while partial items are intentionally called out in the notes.
 - [ ] Repeat browser smoke test after future UI changes
 - [x] Add committed automated Playwright test suite
 - [x] Configure Playwright suite in CI
+- [x] Committed Playwright test verifies category create/list/edit/delete,
+      duplicate-path errors, and edit persistence after refresh
 - [x] Isolate Playwright test data using a disposable Compose stack on port 8081
