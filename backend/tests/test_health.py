@@ -1,4 +1,6 @@
+import sqlite3
 from collections.abc import AsyncIterator
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -45,6 +47,25 @@ async def test_first_user_can_register_and_use_session_cookie(client: httpx.Asyn
 
     logout = await client.post("/api/auth/logout")
     assert logout.status_code == 204
+    assert (await client.get("/api/auth/me")).status_code == 401
+
+
+async def test_expired_session_is_rejected(client: httpx.AsyncClient, tmp_path) -> None:
+    response = await client.post(
+        "/api/auth/register",
+        json={
+            "display_name": "Expired User",
+            "email": "expired@example.com",
+            "password": "password123",
+        },
+    )
+    assert response.status_code == 201
+
+    expired_at = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    with sqlite3.connect(tmp_path / "test.sqlite3") as database:
+        database.execute("UPDATE sessions SET expires_at = ?", (expired_at,))
+        database.commit()
+
     assert (await client.get("/api/auth/me")).status_code == 401
 
 

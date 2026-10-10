@@ -193,10 +193,13 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     SELECT users.id, users.display_name, users.email, users.role
                     FROM sessions JOIN users ON users.id = sessions.user_id
                     WHERE sessions.token_hash = :token_hash
-                      AND sessions.expires_at > CURRENT_TIMESTAMP
+                      AND sessions.expires_at > :now
                       AND users.is_active = 1
                     """),
-                {"token_hash": hash_session_token(session)},
+                {
+                    "token_hash": hash_session_token(session),
+                    "now": datetime.now(timezone.utc).isoformat(),
+                },
             ).mappings().first()
         if user is None:
             raise HTTPException(status_code=401, detail="Authentication required")
