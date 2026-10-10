@@ -16,6 +16,8 @@ services:
       context: ../backend
     ports:
       - "8000:8000"
+    environment:
+      WIKI_WRANGLER_STORAGE_PATH: /data/storage
     volumes:
       - wiki-wrangler-data:/data
 

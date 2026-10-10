@@ -16,6 +16,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [ ] `worker` service
   - [ ] `redis` service
   - [x] Descriptive Compose project, image, and volume names
+  - [x] API capture storage mapped into the persistent named volume
 - [ ] SQLite schema migrations with Alembic
   - [x] SQLite database initialization
   - [ ] Alembic migration history
