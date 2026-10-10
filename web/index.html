@@ -153,6 +153,16 @@
     .category-actions { display: flex; flex-shrink: 0; gap: .2rem; }
     .category-row button { padding: .2rem .4rem; color: var(--accent-dark); background: transparent; font-size: .72rem; }
     .category-row button:hover { background: transparent; text-decoration: underline; }
+    .repository-form { display: grid; gap: .65rem; margin-top: 1rem; }
+    .repository-form button { width: 100%; }
+    .repository-list { display: grid; gap: .4rem; margin-top: 1rem; }
+    .repository-row { display: flex; justify-content: space-between; gap: .8rem; align-items: center; font: .8rem Arial, sans-serif; }
+    .repository-label { display: grid; gap: .15rem; min-width: 0; }
+    .repository-label strong, .repository-label small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .repository-label small { color: var(--muted); font: .72rem Arial, sans-serif; }
+    .repository-actions { display: flex; flex-shrink: 0; gap: .2rem; }
+    .repository-row button { padding: .2rem .4rem; color: var(--accent-dark); background: transparent; font-size: .72rem; }
+    .repository-row button:hover { background: transparent; text-decoration: underline; }
     .review textarea { width: 100%; min-height: 180px; resize: vertical; }
     .review-actions { display: flex; gap: .6rem; margin-top: .8rem; }
     .review-actions button { flex: 1; }
@@ -313,6 +323,42 @@
           <div class="category-list" id="category-list"></div>
           <p class="message" id="category-message" role="status"></p>
         </details>
+        <details class="category-settings" id="repository-settings" hidden>
+          <summary>Manage repositories</summary>
+          <form class="repository-form" id="repository-form">
+            <label>
+              Name
+              <input id="repository-name" type="text" required>
+            </label>
+            <label>
+              Remote URL
+              <input id="repository-remote" type="text" placeholder="https://github.com/org/wiki.git" required>
+            </label>
+            <label>
+              Default branch
+              <input id="repository-branch" type="text" value="main" required>
+            </label>
+            <label>
+              Credential reference
+              <input id="repository-credential" type="text" placeholder="github-work" required>
+            </label>
+            <label>
+              Raw root
+              <input id="repository-raw-root" type="text" value="raw" required>
+            </label>
+            <label>
+              Curated root
+              <input id="repository-curated-root" type="text" value="curated" required>
+            </label>
+            <label>
+              <span class="field-heading">Default repository</span>
+              <input id="repository-default" type="checkbox">
+            </label>
+            <button type="submit">Create repository</button>
+          </form>
+          <div class="repository-list" id="repository-list"></div>
+          <p class="message" id="repository-message" role="status"></p>
+        </details>
       </div>
     </section>
   </main>
@@ -364,11 +410,30 @@
     const categoryParent = document.querySelector("#category-parent");
     const categoryMessage = document.querySelector("#category-message");
     const categoryList = document.querySelector("#category-list");
+    const repositorySettings = document.querySelector("#repository-settings");
+    const repositoryForm = document.querySelector("#repository-form");
+    const repositoryName = document.querySelector("#repository-name");
+    const repositoryRemote = document.querySelector("#repository-remote");
+    const repositoryBranch = document.querySelector("#repository-branch");
+    const repositoryCredential = document.querySelector("#repository-credential");
+    const repositoryRawRoot = document.querySelector("#repository-raw-root");
+    const repositoryCuratedRoot = document.querySelector("#repository-curated-root");
+    const repositoryDefault = document.querySelector("#repository-default");
+    const repositoryList = document.querySelector("#repository-list");
+    const repositoryMessage = document.querySelector("#repository-message");
     let categories = [];
+    let repositories = [];
     let selectedItem = null;
     let editingCategoryId = null;
+    let editingRepositoryId = null;
     let categoryPathTouched = false;
     let registering = false;
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[character]);
+    }
 
     function renderMarkdown(markdown) {
       return DOMPurify.sanitize(marked.parse(markdown, { gfm: true }));
@@ -428,6 +493,15 @@
       categoryList.innerHTML = categories.length
         ? categories.map((category) => `<div class="category-row"><div class="category-label"><strong>${escapeHtml(category.name)}</strong><small>${escapeHtml(category.path)}</small></div><span class="category-actions"><button type="button" data-edit-category="${category.id}">Edit</button><button type="button" data-delete-category="${category.id}">Delete</button></span></div>`).join("")
         : '<p class="empty">No categories yet.</p>';
+    }
+
+    async function loadRepositories() {
+      const response = await fetch("/api/repositories", { credentials: "same-origin" });
+      if (!response.ok) throw new Error("Could not load repositories");
+      repositories = await response.json();
+      repositoryList.innerHTML = repositories.length
+        ? repositories.map((repository) => `<div class="repository-row"><div class="repository-label"><strong>${escapeHtml(repository.name)}${repository.is_default ? " (default)" : ""}</strong><small>${escapeHtml(repository.curated_root)} · ${escapeHtml(repository.remote_url)}</small></div><span class="repository-actions"><button type="button" data-edit-repository="${repository.id}">Edit</button><button type="button" data-delete-repository="${repository.id}">Delete</button></span></div>`).join("")
+        : '<p class="empty">No repositories configured.</p>';
     }
 
     async function openReview(itemId) {
@@ -541,9 +615,13 @@
       document.body.classList.add("workspace-mode");
       authView.hidden = true;
       appView.hidden = false;
+      repositorySettings.hidden = user.role !== "admin";
       userGreeting.textContent = `Signed in as ${user.display_name}.`;
       loadItems().catch((error) => { captureMessage.textContent = error.message; });
       loadCategories().catch((error) => { categoryMessage.textContent = error.message; });
+      if (user.role === "admin") {
+        loadRepositories().catch((error) => { repositoryMessage.textContent = error.message; });
+      }
     }
 
     categoryForm.addEventListener("submit", async (event) => {
@@ -605,6 +683,75 @@
       }
     });
 
+    repositoryForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      repositoryMessage.textContent = editingRepositoryId ? "Saving..." : "Creating...";
+      try {
+        const endpoint = editingRepositoryId
+          ? `/api/repositories/${encodeURIComponent(editingRepositoryId)}`
+          : "/api/repositories";
+        const response = await fetch(endpoint, {
+          method: editingRepositoryId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            name: repositoryName.value,
+            remote_url: repositoryRemote.value,
+            default_branch: repositoryBranch.value,
+            credential_ref: repositoryCredential.value,
+            raw_root: repositoryRawRoot.value,
+            curated_root: repositoryCuratedRoot.value,
+            is_default: repositoryDefault.checked
+          })
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Could not save repository");
+        repositoryName.value = "";
+        repositoryRemote.value = "";
+        repositoryBranch.value = "main";
+        repositoryCredential.value = "";
+        repositoryRawRoot.value = "raw";
+        repositoryCuratedRoot.value = "curated";
+        repositoryDefault.checked = false;
+        editingRepositoryId = null;
+        repositoryForm.querySelector("button[type=submit]").textContent = "Create repository";
+        repositoryMessage.textContent = "Repository saved.";
+        await loadRepositories();
+      } catch (error) {
+        repositoryMessage.textContent = error.message;
+      }
+    });
+
+    repositoryList.addEventListener("click", async (event) => {
+      const editButton = event.target.closest("[data-edit-repository]");
+      const deleteButton = event.target.closest("[data-delete-repository]");
+      if (editButton) {
+        const repository = repositories.find((entry) => entry.id === editButton.dataset.editRepository);
+        if (!repository) return;
+        editingRepositoryId = repository.id;
+        repositoryName.value = repository.name;
+        repositoryRemote.value = repository.remote_url;
+        repositoryBranch.value = repository.default_branch;
+        repositoryCredential.value = repository.credential_ref;
+        repositoryRawRoot.value = repository.raw_root;
+        repositoryCuratedRoot.value = repository.curated_root;
+        repositoryDefault.checked = Boolean(repository.is_default);
+        repositoryForm.querySelector("button[type=submit]").textContent = "Save repository";
+        return;
+      }
+      if (deleteButton) {
+        const response = await fetch(
+          `/api/repositories/${encodeURIComponent(deleteButton.dataset.deleteRepository)}`,
+          { method: "DELETE", credentials: "same-origin" },
+        );
+        const body = response.status === 204 ? {} : await response.json();
+        repositoryMessage.textContent = response.ok
+          ? "Repository deleted."
+          : (body.detail || "Could not delete repository");
+        if (response.ok) await loadRepositories();
+      }
+    });
+
     categoryName.addEventListener("input", () => {
       if (editingCategoryId || categoryPathTouched) return;
       categoryPath.value = categoryName.value
@@ -622,6 +769,7 @@
       appView.hidden = true;
       authView.hidden = false;
       document.body.classList.remove("workspace-mode");
+      repositorySettings.hidden = true;
       reviewView.hidden = true;
       selectedItem = null;
       message.textContent = "Signed out.";

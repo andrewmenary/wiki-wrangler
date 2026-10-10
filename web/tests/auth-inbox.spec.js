@@ -8,7 +8,7 @@ test("a user can register, restore a session, sign out, and sign back in", async
   await page.getByRole("button", { name: "Create an account" }).click();
   await expect(page.getByLabel("Display name")).toBeVisible();
 
-  const email = `playwright-${Date.now()}@example.com`;
+  const email = "browser-admin@example.com";
   await page.getByLabel("Display name").fill("Browser Test User");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("password123");
@@ -101,6 +101,52 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
   await editedRow.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.locator("#category-message")).toHaveText("Category deleted.");
   await expect(editedRow).toHaveCount(0);
+});
+
+test("an admin can configure repository roots", async ({ page }) => {
+  const login = await page.request.post("/api/auth/login", {
+    data: {
+      email: "browser-admin@example.com",
+      password: "password123",
+    },
+  });
+  expect(login.status()).toBe(200);
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await page.getByText("Manage repositories", { exact: true }).click();
+  const repositoryForm = page.locator("#repository-form");
+  await repositoryForm.locator("#repository-name").fill("Work Wiki");
+  await repositoryForm.locator("#repository-remote").fill("https://github.com/example/work-wiki.git");
+  await repositoryForm.locator("#repository-credential").fill("github-work");
+  await repositoryForm.locator("#repository-raw-root").fill("sources");
+  await repositoryForm.locator("#repository-curated-root").fill("knowledge");
+  await repositoryForm.locator("#repository-default").check();
+  await repositoryForm.getByRole("button", { name: "Create repository" }).click();
+  await expect(page.locator("#repository-message")).toHaveText("Repository saved.");
+
+  const repositoryRow = page.locator(".repository-row").filter({ hasText: "Work Wiki" });
+  await expect(repositoryRow).toContainText("knowledge");
+  await expect(repositoryRow).toContainText("(default)");
+
+  await repositoryRow.getByRole("button", { name: "Edit" }).click();
+  await repositoryForm.locator("#repository-curated-root").fill("published");
+  await repositoryForm.getByRole("button", { name: "Save repository" }).click();
+  await expect(repositoryRow).toContainText("published");
+
+  await repositoryRow.getByRole("button", { name: "Delete" }).click();
+  await expect(page.locator("#repository-message")).toHaveText(
+    "The default repository cannot be deleted",
+  );
+
+  await repositoryForm.locator("#repository-name").fill("Personal Wiki");
+  await repositoryForm.locator("#repository-remote").fill("git@github.com:example/personal-wiki.git");
+  await repositoryForm.locator("#repository-credential").fill("github-personal");
+  await repositoryForm.getByRole("button", { name: "Create repository" }).click();
+  const personalRow = page.locator(".repository-row").filter({ hasText: "Personal Wiki" });
+  await expect(personalRow).toBeVisible();
+  await personalRow.getByRole("button", { name: "Delete" }).click();
+  await expect(page.locator("#repository-message")).toHaveText("Repository deleted.");
 });
 
 test("a capture can be reviewed with metadata and approved", async ({ page }) => {

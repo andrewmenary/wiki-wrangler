@@ -79,7 +79,7 @@ configuration, while partial items are intentionally called out in the notes.
 
 - [ ] Repository configuration
   - [x] Admin API for repository targets, roots, and default selection
-  - [ ] Repository Settings UI
+  - [x] Repository Settings UI
 - [ ] Publish worker
 - [ ] Raw and curated Git paths
 - [ ] Publication records and commit links
