@@ -88,4 +88,5 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Registration transitions to the Inbox
   - [x] Inbox loads captures and categories
 - [ ] Repeat browser smoke test after future UI changes
-- [ ] Add committed automated Playwright test suite
+- [x] Add committed automated Playwright test suite
+- [x] Configure Playwright suite in CI

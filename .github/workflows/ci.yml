@@ -37,3 +37,31 @@ jobs:
       - name: Build API image
         working-directory: .
         run: docker compose -f deploy/docker-compose.yml build api
+
+  browser:
+    runs-on: ubuntu-latest
+    needs: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Playwright dependencies
+        run: npm install
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start application
+        run: docker compose -f deploy/docker-compose.yml up -d --build
+
+      - name: Run browser tests
+        run: npm run test:ui
+
+      - name: Stop application
+        if: always()
+        run: docker compose -f deploy/docker-compose.yml down -v
