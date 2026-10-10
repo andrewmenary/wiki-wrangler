@@ -113,6 +113,15 @@
     .review { margin-top: 1.8rem; padding-top: 1.3rem; border-top: 1px solid var(--line); }
     .review h3 { margin: 0 0 1rem; font-size: 1.35rem; }
     .review-meta { display: grid; gap: .8rem; margin-bottom: 1rem; }
+    .category-settings { margin-top: 1.8rem; padding-top: 1.3rem; border-top: 1px solid var(--line); }
+    .category-settings summary { cursor: pointer; color: var(--accent-dark); font: 700 .78rem Arial, sans-serif; text-transform: uppercase; }
+    .category-form { display: grid; gap: .65rem; margin-top: 1rem; }
+    .category-form button { width: 100%; }
+    .category-list { display: grid; gap: .4rem; margin-top: 1rem; }
+    .category-row { display: flex; justify-content: space-between; gap: .5rem; align-items: center; font: .8rem Arial, sans-serif; }
+    .category-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .category-row button { padding: .2rem .4rem; color: var(--accent-dark); background: transparent; font-size: .72rem; }
+    .category-row button:hover { background: transparent; text-decoration: underline; }
     .review textarea { width: 100%; min-height: 180px; resize: vertical; }
     .review-actions { display: flex; gap: .6rem; margin-top: .8rem; }
     .review-actions button { flex: 1; }
@@ -185,6 +194,12 @@
               Tags
               <input id="review-tags" type="text" placeholder="process, onboarding, notes">
             </label>
+            <label>
+              Category
+              <select id="review-category">
+                <option value="">Uncategorized</option>
+              </select>
+            </label>
           </div>
           <label>
             Markdown draft
@@ -193,9 +208,32 @@
           <p class="message" id="review-message" role="status"></p>
           <div class="review-actions">
             <button class="secondary-button" id="review-save" type="button">Save changes</button>
+            <button class="secondary-button" id="review-archive" type="button">Archive</button>
             <button id="review-approve" type="button">Approve</button>
           </div>
         </div>
+        <details class="category-settings">
+          <summary>Manage categories</summary>
+          <form class="category-form" id="category-form">
+            <label>
+              Name
+              <input id="category-name" type="text" required>
+            </label>
+            <label>
+              Path
+              <input id="category-path" type="text" placeholder="processes/onboarding" required>
+            </label>
+            <label>
+              Parent
+              <select id="category-parent">
+                <option value="">No parent</option>
+              </select>
+            </label>
+            <button type="submit">Create category</button>
+          </form>
+          <div class="category-list" id="category-list"></div>
+          <p class="message" id="category-message" role="status"></p>
+        </details>
       </div>
     </section>
   </main>
@@ -220,11 +258,21 @@
     const reviewTitle = document.querySelector("#review-title");
     const reviewSummary = document.querySelector("#review-summary");
     const reviewTags = document.querySelector("#review-tags");
+    const reviewCategory = document.querySelector("#review-category");
     const reviewMarkdown = document.querySelector("#review-markdown");
     const reviewMessage = document.querySelector("#review-message");
     const reviewSave = document.querySelector("#review-save");
     const reviewApprove = document.querySelector("#review-approve");
+    const reviewArchive = document.querySelector("#review-archive");
+    const categoryForm = document.querySelector("#category-form");
+    const categoryName = document.querySelector("#category-name");
+    const categoryPath = document.querySelector("#category-path");
+    const categoryParent = document.querySelector("#category-parent");
+    const categoryMessage = document.querySelector("#category-message");
+    const categoryList = document.querySelector("#category-list");
+    let categories = [];
     let selectedItem = null;
+    let editingCategoryId = null;
     let registering = false;
 
     function setMode(nextRegistering) {
@@ -255,6 +303,26 @@
         : '<p class="empty">No captures yet.</p>';
     }
 
+    async function loadCategories() {
+      const response = await fetch("/api/categories", { credentials: "same-origin" });
+      if (!response.ok) throw new Error("Could not load categories");
+      categories = await response.json();
+      const options = categories.map((category) => {
+        const option = document.createElement("option");
+        option.value = category.id;
+        option.textContent = `${category.path}`;
+        return option;
+      });
+      reviewCategory.replaceChildren(new Option("Uncategorized", ""), ...options);
+      categoryParent.replaceChildren(new Option("No parent", ""), ...options.map((option) => option.cloneNode(true)));
+      const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[character]);
+      categoryList.innerHTML = categories.length
+        ? categories.map((category) => `<div class="category-row"><span>${escapeHtml(category.path)}</span><span><button type="button" data-edit-category="${category.id}">Edit</button><button type="button" data-delete-category="${category.id}">Delete</button></span></div>`).join("")
+        : '<p class="empty">No categories yet.</p>';
+    }
+
     async function openReview(itemId) {
       const response = await fetch(`/api/items/${encodeURIComponent(itemId)}`, { credentials: "same-origin" });
       if (!response.ok) throw new Error("Could not load the item");
@@ -262,9 +330,11 @@
       reviewTitle.textContent = selectedItem.title;
       reviewSummary.value = selectedItem.summary || "";
       reviewTags.value = (selectedItem.tags || []).join(", ");
+      reviewCategory.value = selectedItem.category_id || "";
       reviewMarkdown.value = selectedItem.markdown_final || selectedItem.markdown_generated || "";
       reviewSave.hidden = selectedItem.status === "approved";
       reviewApprove.hidden = selectedItem.status !== "review";
+      reviewArchive.hidden = !["draft", "review"].includes(selectedItem.status);
       reviewMessage.textContent = `Status: ${selectedItem.status}`;
       reviewView.hidden = false;
     }
@@ -295,6 +365,7 @@
         const fields = {
           summary: reviewSummary.value,
           tags: reviewTags.value.split(",").map((tag) => tag.trim()).filter(Boolean),
+          category_id: reviewCategory.value || null,
           markdown_final: reviewMarkdown.value
         };
         if (selectedItem.status === "draft") fields.status = "review";
@@ -312,10 +383,22 @@
         await updateSelectedItem({
           summary: reviewSummary.value,
           tags: reviewTags.value.split(",").map((tag) => tag.trim()).filter(Boolean),
+          category_id: reviewCategory.value || null,
           markdown_final: reviewMarkdown.value,
           status: "approved"
         });
         reviewMessage.textContent = "Approved for publishing.";
+      } catch (error) {
+        reviewMessage.textContent = error.message;
+      }
+    });
+
+    reviewArchive.addEventListener("click", async () => {
+      if (!selectedItem) return;
+      reviewMessage.textContent = "Archiving...";
+      try {
+        await updateSelectedItem({ status: "archived" });
+        reviewMessage.textContent = "Archived. The capture remains available in Inbox history.";
       } catch (error) {
         reviewMessage.textContent = error.message;
       }
@@ -326,7 +409,65 @@
       appView.hidden = false;
       userGreeting.textContent = `Signed in as ${user.display_name}.`;
       loadItems().catch((error) => { captureMessage.textContent = error.message; });
+      loadCategories().catch((error) => { categoryMessage.textContent = error.message; });
     }
+
+    categoryForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      categoryMessage.textContent = editingCategoryId ? "Saving..." : "Creating...";
+      try {
+        const endpoint = editingCategoryId
+          ? `/api/categories/${encodeURIComponent(editingCategoryId)}`
+          : "/api/categories";
+        const response = await fetch(endpoint, {
+          method: editingCategoryId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            name: categoryName.value,
+            path: categoryPath.value,
+            parent_id: categoryParent.value || null
+          })
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Could not create category");
+        categoryName.value = "";
+        categoryPath.value = "";
+        categoryParent.value = "";
+        editingCategoryId = null;
+        categoryForm.querySelector("button[type=submit]").textContent = "Create category";
+        categoryMessage.textContent = "Category saved.";
+        await loadCategories();
+      } catch (error) {
+        categoryMessage.textContent = error.message;
+      }
+    });
+
+    categoryList.addEventListener("click", async (event) => {
+      const editButton = event.target.closest("[data-edit-category]");
+      const deleteButton = event.target.closest("[data-delete-category]");
+      if (editButton) {
+        const category = categories.find((entry) => entry.id === editButton.dataset.editCategory);
+        if (!category) return;
+        editingCategoryId = category.id;
+        categoryName.value = category.name;
+        categoryPath.value = category.path;
+        categoryParent.value = category.parent_id || "";
+        categoryForm.querySelector("button[type=submit]").textContent = "Save category";
+        return;
+      }
+      if (deleteButton) {
+        const response = await fetch(
+          `/api/categories/${encodeURIComponent(deleteButton.dataset.deleteCategory)}`,
+          { method: "DELETE", credentials: "same-origin" },
+        );
+        const body = response.status === 204 ? {} : await response.json();
+        categoryMessage.textContent = response.ok
+          ? "Category deleted."
+          : (body.detail || "Could not delete category");
+        if (response.ok) await loadCategories();
+      }
+    });
 
     document.querySelector("#logout-button").addEventListener("click", async () => {
       await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });

@@ -217,6 +217,38 @@ async def test_categories_support_hierarchy_and_item_assignment(client: httpx.As
     )
     assert duplicate.status_code == 409
 
+    edited = await client.patch(
+        f"/api/categories/{child.json()['id']}",
+        json={"name": "New Hire Onboarding", "path": "processes/new-hire-onboarding"},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["path"] == "processes/new-hire-onboarding"
+
+    assigned_delete = await client.delete(f"/api/categories/{edited.json()['id']}")
+    assert assigned_delete.status_code == 409
+
+    removable = await client.post(
+        "/api/categories",
+        json={"name": "Temporary", "path": "temporary"},
+    )
+    assert (await client.delete(f"/api/categories/{removable.json()['id']}")).status_code == 204
+
+
+async def test_draft_can_be_archived_without_hard_deleting_it(client: httpx.AsyncClient) -> None:
+    capture = await client.post(
+        "/api/items",
+        json={"title": "Discard me", "source_type": "manual", "markdown": "Text"},
+    )
+
+    response = await client.patch(
+        f"/api/items/{capture.json()['id']}",
+        json={"status": "archived"},
+    )
+
+    assert response.status_code == 200
+    detail = await client.get(f"/api/items/{capture.json()['id']}")
+    assert detail.json()["status"] == "archived"
+
 
 async def test_invalid_item_transition_is_rejected(client: httpx.AsyncClient) -> None:
     capture = await client.post(

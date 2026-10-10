@@ -56,6 +56,12 @@ class CategoryRequest(BaseModel):
     parent_id: str | None = None
 
 
+class CategoryUpdateRequest(BaseModel):
+    name: str | None = None
+    path: str | None = None
+    parent_id: str | None = None
+
+
 ALLOWED_UPLOAD_EXTENSIONS = {".csv", ".docx", ".md", ".pdf", ".pptx", ".txt", ".xlsx"}
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 MAX_URL_SIZE = 10 * 1024 * 1024
@@ -258,6 +264,63 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 raise
         return {"id": category_id, "name": name, "path": path, "parent_id": request.parent_id}
 
+    @app.patch("/api/categories/{category_id}")
+    def update_category(
+        category_id: str, request: CategoryUpdateRequest
+    ) -> dict[str, object]:
+        if request.name is None and request.path is None and request.parent_id is None:
+            raise HTTPException(status_code=422, detail="At least one category field is required")
+        with engine.begin() as connection:
+            category = connection.execute(
+                text("SELECT id, name, path, parent_id FROM categories WHERE id = :category_id"),
+                {"category_id": category_id},
+            ).mappings().first()
+            if category is None:
+                raise HTTPException(status_code=404, detail="Category not found")
+            if request.parent_id == category_id:
+                raise HTTPException(status_code=422, detail="Category cannot be its own parent")
+            if request.parent_id is not None:
+                parent = connection.execute(
+                    text("SELECT id FROM categories WHERE id = :parent_id"),
+                    {"parent_id": request.parent_id},
+                ).first()
+                if parent is None:
+                    raise HTTPException(status_code=422, detail="Parent category not found")
+            name = request.name.strip() if request.name is not None else category["name"]
+            path = request.path.strip().strip("/") if request.path is not None else category["path"]
+            if not name or not path:
+                raise HTTPException(status_code=422, detail="Category name and path are required")
+            try:
+                connection.execute(
+                    text("""
+                        UPDATE categories
+                        SET name = :name, path = :path, parent_id = :parent_id
+                        WHERE id = :category_id
+                        """),
+                    {
+                        "category_id": category_id,
+                        "name": name,
+                        "path": path,
+                        "parent_id": request.parent_id
+                        if request.parent_id is not None
+                        else category["parent_id"],
+                    },
+                )
+            except Exception as error:
+                if "UNIQUE constraint failed: categories.path" in str(error):
+                    raise HTTPException(
+                        status_code=409, detail="Category path already exists"
+                    ) from error
+                raise
+        return {
+            "id": category_id,
+            "name": name,
+            "path": path,
+            "parent_id": request.parent_id
+            if request.parent_id is not None
+            else category["parent_id"],
+        }
+
     @app.delete("/api/categories/{category_id}", status_code=204)
     def delete_category(category_id: str) -> None:
         with engine.begin() as connection:
@@ -273,6 +336,12 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             ).first()
             if assigned is not None:
                 raise HTTPException(status_code=409, detail="Category is assigned to an item")
+            child = connection.execute(
+                text("SELECT 1 FROM categories WHERE parent_id = :category_id LIMIT 1"),
+                {"category_id": category_id},
+            ).first()
+            if child is not None:
+                raise HTTPException(status_code=409, detail="Category has child categories")
             connection.execute(
                 text("DELETE FROM categories WHERE id = :category_id"),
                 {"category_id": category_id},
