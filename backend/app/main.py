@@ -592,6 +592,31 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 text("DELETE FROM repositories WHERE id = :id"), {"id": repository_id}
             )
 
+    @app.get("/api/audit", dependencies=[Depends(require_admin)])
+    def list_audit_events(item_id: str | None = None) -> list[dict[str, object]]:
+        query = """
+            SELECT audit_events.id, audit_events.item_id, audit_events.action,
+                audit_events.details_json, audit_events.occurred_at,
+                users.display_name AS user_display_name,
+                items.title AS item_title
+            FROM audit_events
+            LEFT JOIN users ON users.id = audit_events.user_id
+            LEFT JOIN items ON items.id = audit_events.item_id
+        """
+        parameters: dict[str, str] = {}
+        if item_id is not None:
+            query += " WHERE audit_events.item_id = :item_id"
+            parameters["item_id"] = item_id
+        query += " ORDER BY audit_events.occurred_at DESC"
+        with engine.connect() as connection:
+            rows = connection.execute(text(query), parameters).mappings().all()
+        events = []
+        for row in rows:
+            event = dict(row)
+            event["details"] = json.loads(event.pop("details_json") or "{}")
+            events.append(event)
+        return events
+
     @app.post("/api/items", status_code=201, dependencies=[Depends(require_session)])
     def capture_item(request: CaptureRequest) -> dict[str, str]:
         submission_id = str(uuid4())

@@ -164,6 +164,10 @@
     .repository-actions { display: flex; flex-shrink: 0; gap: .2rem; }
     .repository-row button { padding: .2rem .4rem; color: var(--accent-dark); background: transparent; font-size: .72rem; }
     .repository-row button:hover { background: transparent; text-decoration: underline; }
+    .audit-list { display: grid; gap: .5rem; margin-top: 1rem; }
+    .audit-row { padding: .55rem 0; border-top: 1px solid var(--line); font: .75rem/1.4 Arial, sans-serif; }
+    .audit-row strong, .audit-row small { display: block; }
+    .audit-row small { color: var(--muted); }
     .review textarea { width: 100%; min-height: 180px; resize: vertical; }
     .review-actions { display: flex; gap: .6rem; margin-top: .8rem; }
     .review-actions button { flex: 1; }
@@ -361,6 +365,11 @@
           <div class="repository-list" id="repository-list"></div>
           <p class="message" id="repository-message" role="status"></p>
         </details>
+        <details class="category-settings" id="audit-settings" hidden>
+          <summary>View audit log</summary>
+          <div class="audit-list" id="audit-list"></div>
+          <p class="message" id="audit-message" role="status"></p>
+        </details>
       </div>
     </section>
   </main>
@@ -424,6 +433,9 @@
     const repositoryDefault = document.querySelector("#repository-default");
     const repositoryList = document.querySelector("#repository-list");
     const repositoryMessage = document.querySelector("#repository-message");
+    const auditSettings = document.querySelector("#audit-settings");
+    const auditList = document.querySelector("#audit-list");
+    const auditMessage = document.querySelector("#audit-message");
     let categories = [];
     let repositories = [];
     let selectedItem = null;
@@ -505,6 +517,15 @@
       repositoryList.innerHTML = repositories.length
         ? repositories.map((repository) => `<div class="repository-row"><div class="repository-label"><strong>${escapeHtml(repository.name)}${repository.is_default ? " (default)" : ""}</strong><small>${escapeHtml(repository.curated_root)} · ${escapeHtml(repository.remote_url)}</small></div><span class="repository-actions"><button type="button" data-edit-repository="${repository.id}">Edit</button><button type="button" data-delete-repository="${repository.id}">Delete</button></span></div>`).join("")
         : '<p class="empty">No repositories configured.</p>';
+    }
+
+    async function loadAuditEvents() {
+      const response = await fetch("/api/audit", { credentials: "same-origin" });
+      if (!response.ok) throw new Error("Could not load audit events");
+      const events = await response.json();
+      auditList.innerHTML = events.length
+        ? events.map((event) => `<div class="audit-row"><strong>${escapeHtml(event.action)}</strong><span>${escapeHtml(event.item_title || "System event")}</span><small>${escapeHtml(event.user_display_name || "Unknown user")} · ${escapeHtml(event.occurred_at)}</small></div>`).join("")
+        : '<p class="empty">No audit events yet.</p>';
     }
 
     async function openReview(itemId) {
@@ -632,11 +653,13 @@
       authView.hidden = true;
       appView.hidden = false;
       repositorySettings.hidden = user.role !== "admin";
+      auditSettings.hidden = user.role !== "admin";
       userGreeting.textContent = `Signed in as ${user.display_name}.`;
       loadItems().catch((error) => { captureMessage.textContent = error.message; });
       loadCategories().catch((error) => { categoryMessage.textContent = error.message; });
       if (user.role === "admin") {
         loadRepositories().catch((error) => { repositoryMessage.textContent = error.message; });
+        loadAuditEvents().catch((error) => { auditMessage.textContent = error.message; });
       }
     }
 
@@ -786,6 +809,7 @@
       authView.hidden = false;
       document.body.classList.remove("workspace-mode");
       repositorySettings.hidden = true;
+      auditSettings.hidden = true;
       reviewView.hidden = true;
       selectedItem = null;
       message.textContent = "Signed out.";

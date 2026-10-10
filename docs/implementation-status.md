@@ -96,6 +96,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Publication and audit schema foundation
 - [ ] Audit log
   - [x] Authenticated item edit and approval events recorded
+  - [x] Administrator audit feed API and workspace viewer
 
 ## Later Phases
 

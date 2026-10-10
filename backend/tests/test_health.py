@@ -362,6 +362,12 @@ async def test_item_can_be_reviewed_edited_and_approved(
         ]
     assert "item.approved" in actions
 
+    audit = await authenticated_client.get(f"/api/audit?item_id={item_id}")
+    assert audit.status_code == 200
+    approval_event = next(event for event in audit.json() if event["action"] == "item.approved")
+    assert approval_event["item_title"] == "notes"
+    assert "status" in approval_event["details"]["fields"]
+
     listed = await authenticated_client.get("/api/items")
     listed_item = next(item for item in listed.json() if item["id"] == item_id)
     assert listed_item["tags"] == ["meeting", "planning"]
