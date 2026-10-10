@@ -41,6 +41,18 @@ async def test_health_reports_database_status(client: httpx.AsyncClient) -> None
     assert response.json() == {"status": "ok", "database": "ok"}
 
 
+async def test_publishing_tables_are_initialized(client: httpx.AsyncClient, tmp_path) -> None:
+    with sqlite3.connect(tmp_path / "test.sqlite3") as database:
+        tables = {
+            row[0]
+            for row in database.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+
+    assert {"publications", "audit_events"}.issubset(tables)
+
+
 async def test_item_routes_require_authentication(client: httpx.AsyncClient) -> None:
     response = await client.get("/api/items")
 

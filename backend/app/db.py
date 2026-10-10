@@ -95,6 +95,38 @@ def initialize_database(engine: Engine) -> None:
         connection.execute(
             text(
                 """
+                CREATE TABLE IF NOT EXISTS publications (
+                    id TEXT PRIMARY KEY,
+                    item_id TEXT NOT NULL UNIQUE REFERENCES items(id),
+                    repository_id TEXT NOT NULL REFERENCES repositories(id),
+                    raw_path TEXT NOT NULL,
+                    curated_path TEXT NOT NULL,
+                    commit_sha TEXT,
+                    branch TEXT,
+                    pr_url TEXT,
+                    published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    published_by TEXT REFERENCES users(id)
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS audit_events (
+                    id TEXT PRIMARY KEY,
+                    item_id TEXT REFERENCES items(id),
+                    user_id TEXT REFERENCES users(id),
+                    action TEXT NOT NULL,
+                    details_json TEXT NOT NULL DEFAULT '{}',
+                    occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
                 CREATE TABLE IF NOT EXISTS items (
                     id TEXT PRIMARY KEY,
                     submission_id TEXT NOT NULL REFERENCES source_submissions(id),

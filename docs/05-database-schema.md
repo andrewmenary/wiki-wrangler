@@ -155,6 +155,8 @@ CREATE TABLE publications (
     id              TEXT PRIMARY KEY,
     item_id         TEXT NOT NULL REFERENCES items(id),
     repository_id   TEXT NOT NULL REFERENCES repositories(id),
+    raw_path        TEXT NOT NULL,
+    curated_path    TEXT NOT NULL,
     commit_sha      TEXT,
     branch          TEXT,
     pr_url          TEXT,
