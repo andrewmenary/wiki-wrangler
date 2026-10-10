@@ -268,7 +268,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
     def update_category(
         category_id: str, request: CategoryUpdateRequest
     ) -> dict[str, object]:
-        if request.name is None and request.path is None and request.parent_id is None:
+        if not request.model_fields_set:
             raise HTTPException(status_code=422, detail="At least one category field is required")
         with engine.begin() as connection:
             category = connection.execute(
@@ -288,6 +288,11 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     raise HTTPException(status_code=422, detail="Parent category not found")
             name = request.name.strip() if request.name is not None else category["name"]
             path = request.path.strip().strip("/") if request.path is not None else category["path"]
+            parent_id = (
+                request.parent_id
+                if "parent_id" in request.model_fields_set
+                else category["parent_id"]
+            )
             if not name or not path:
                 raise HTTPException(status_code=422, detail="Category name and path are required")
             try:
@@ -301,9 +306,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                         "category_id": category_id,
                         "name": name,
                         "path": path,
-                        "parent_id": request.parent_id
-                        if request.parent_id is not None
-                        else category["parent_id"],
+                        "parent_id": parent_id,
                     },
                 )
             except Exception as error:
@@ -316,9 +319,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             "id": category_id,
             "name": name,
             "path": path,
-            "parent_id": request.parent_id
-            if request.parent_id is not None
-            else category["parent_id"],
+            "parent_id": parent_id,
         }
 
     @app.delete("/api/categories/{category_id}", status_code=204)
@@ -443,14 +444,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
 
     @app.patch("/api/items/{item_id}")
     def update_item(item_id: str, request: ItemUpdateRequest) -> dict[str, object]:
-        if (
-            request.title is None
-            and request.summary is None
-            and request.tags is None
-            and request.category_id is None
-            and request.markdown_final is None
-            and request.status is None
-        ):
+        if not request.model_fields_set:
             raise HTTPException(status_code=422, detail="At least one item field is required")
         if request.title is not None and not request.title.strip():
             raise HTTPException(status_code=422, detail="Title cannot be empty")
@@ -484,31 +478,35 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 if category is None:
                     raise HTTPException(status_code=422, detail="Category not found")
 
+            update_fields = {
+                "title": request.title.strip() if request.title is not None else None,
+                "summary": request.summary.strip() if request.summary is not None else None,
+                "tags_json": json.dumps(
+                    list(dict.fromkeys(tag.strip() for tag in request.tags if tag.strip()))
+                )
+                if request.tags is not None
+                else None,
+                "category_id": request.category_id,
+                "markdown_final": request.markdown_final,
+                "status": target_status.value if target_status is not None else None,
+                "category_id_set": int("category_id" in request.model_fields_set),
+            }
             connection.execute(
                 text("""
                     UPDATE items
                     SET title = COALESCE(:title, title),
                         summary = COALESCE(:summary, summary),
                         tags_json = COALESCE(:tags_json, tags_json),
-                        category_id = COALESCE(:category_id, category_id),
+                        category_id = CASE
+                            WHEN :category_id_set = 1 THEN :category_id
+                            ELSE category_id
+                        END,
                         markdown_final = COALESCE(:markdown_final, markdown_final),
                         status = COALESCE(:status, status)
                     WHERE id = :item_id
                     """
                 ),
-                {
-                    "item_id": item_id,
-                    "title": request.title.strip() if request.title is not None else None,
-                    "summary": request.summary.strip() if request.summary is not None else None,
-                    "tags_json": json.dumps(
-                        list(dict.fromkeys(tag.strip() for tag in request.tags if tag.strip()))
-                    )
-                    if request.tags is not None
-                    else None,
-                    "category_id": request.category_id,
-                    "markdown_final": request.markdown_final,
-                    "status": target_status.value if target_status is not None else None,
-                },
+                {"item_id": item_id, **update_fields},
             )
 
         return {

@@ -211,6 +211,28 @@ async def test_categories_support_hierarchy_and_item_assignment(client: httpx.As
     detail = await client.get(f"/api/items/{item_id}")
     assert detail.json()["category_path"] == "processes/onboarding"
 
+    cleared_assignment = await client.patch(
+        f"/api/items/{item_id}",
+        json={"category_id": None},
+    )
+    assert cleared_assignment.status_code == 200
+    detail = await client.get(f"/api/items/{item_id}")
+    assert detail.json()["category_id"] is None
+    assert detail.json()["category_path"] is None
+
+    cleared_parent = await client.patch(
+        f"/api/categories/{child.json()['id']}",
+        json={"parent_id": None},
+    )
+    assert cleared_parent.status_code == 200
+    assert cleared_parent.json()["parent_id"] is None
+
+    reassigned = await client.patch(
+        f"/api/items/{item_id}",
+        json={"category_id": child.json()["id"]},
+    )
+    assert reassigned.status_code == 200
+
     duplicate = await client.post(
         "/api/categories",
         json={"name": "Other", "path": "processes/onboarding"},
