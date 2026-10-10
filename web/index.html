@@ -561,9 +561,20 @@
         );
         if (publicationResponse.ok) {
           const publication = await publicationResponse.json();
-          publicationHistory.textContent =
-            `Published to ${publication.repository_name} in commit ${publication.commit_sha}. ` +
-            `Path: ${publication.curated_path}`;
+          publicationHistory.replaceChildren(
+            document.createTextNode(
+              `Published to ${publication.repository_name} in commit ${publication.commit_sha}. ` +
+              `Path: ${publication.curated_path} `
+            ),
+          );
+          if (publication.commit_url) {
+            const commitLink = document.createElement("a");
+            commitLink.href = publication.commit_url;
+            commitLink.target = "_blank";
+            commitLink.rel = "noreferrer";
+            commitLink.textContent = "View commit";
+            publicationHistory.append(commitLink);
+          }
           publicationHistory.hidden = false;
         }
       }

@@ -102,6 +102,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Publish API persists commit and resolved path metadata
   - [x] Approved review exposes Publish to Git and commit feedback
   - [x] Publication history API and published-item read-only review state
+  - [x] GitHub commit URL exposed and rendered as a View commit link
 - [ ] Audit log
   - [x] Authenticated item edit and approval events recorded
   - [x] Administrator audit feed API and workspace viewer

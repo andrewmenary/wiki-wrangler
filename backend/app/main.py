@@ -127,6 +127,18 @@ def validate_relative_publication_path(value: str) -> str:
     return "/".join(segments)
 
 
+def git_commit_url(remote_url: str, commit_sha: str | None) -> str | None:
+    if not commit_sha:
+        return None
+    if remote_url.startswith("https://github.com/"):
+        repository = remote_url.removeprefix("https://github.com/")
+    elif remote_url.startswith("git@github.com:"):
+        repository = remote_url.removeprefix("git@github.com:")
+    else:
+        return None
+    return f"https://github.com/{repository.removesuffix('.git').strip('/')}/commit/{commit_sha}"
+
+
 def validate_repository_values(
     request: RepositoryRequest | RepositoryUpdateRequest,
 ) -> dict[str, object]:
@@ -873,6 +885,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             "id": publication_id,
             "status": "published",
             "commit_sha": result.commit_sha,
+            "commit_url": git_commit_url(item["remote_url"], result.commit_sha),
             "raw_path": preview["raw_path"],
             "curated_path": preview["curated_path"],
         }
@@ -887,7 +900,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                         publications.raw_path, publications.curated_path,
                         publications.commit_sha, publications.branch,
                         publications.pr_url, publications.published_at,
-                        repositories.name AS repository_name
+                        repositories.name AS repository_name, repositories.remote_url
                     FROM publications
                     JOIN repositories ON repositories.id = publications.repository_id
                     WHERE publications.item_id = :item_id
@@ -897,7 +910,9 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             ).mappings().first()
         if publication is None:
             raise HTTPException(status_code=404, detail="Publication not found")
-        return dict(publication)
+        result = dict(publication)
+        result["commit_url"] = git_commit_url(result.pop("remote_url"), result["commit_sha"])
+        return result
 
     @app.get("/api/items/{item_id}/source", dependencies=[Depends(require_session)])
     def get_item_source(item_id: str) -> dict[str, object]:
