@@ -262,6 +262,15 @@ async def test_approved_item_can_be_published_and_recorded(
         f"/api/items/{item_id}", json={"status": "approved"}
     )
 
+    def failing_publish(*args, **kwargs):
+        raise RuntimeError("remote unavailable")
+
+    monkeypatch.setattr(main, "publish_remote", failing_publish)
+    failed = await authenticated_client.post(f"/api/items/{item_id}/publish")
+    assert failed.status_code == 502
+    detail = await authenticated_client.get(f"/api/items/{item_id}")
+    assert detail.json()["status"] == "approved"
+
     def fake_publish(*args, **kwargs):
         return PublishResult(commit_sha="abc123", changed=True)
 
