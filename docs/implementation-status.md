@@ -8,10 +8,10 @@ configuration, while partial items are intentionally called out in the notes.
 
 - [ ] Complete repository scaffold from the target structure
   - [x] Basic backend package and test layout
-  - [ ] Web frontend
+  - [x] Web frontend login screen
   - [ ] Worker package
 - [ ] Docker Compose foundation
-  - [ ] `web` service
+  - [x] `web` service
   - [x] `api` service
   - [ ] `worker` service
   - [ ] `redis` service
@@ -23,7 +23,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Admin registration endpoint
   - [x] Login endpoint
   - [x] Session cookie
-  - [ ] Login screen
+  - [x] Login screen
 - [ ] CI pipeline
   - [x] Lint workflow configured and passing on GitHub
   - [x] Unit-test workflow configured and passing on GitHub

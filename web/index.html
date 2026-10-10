@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wiki Wrangler</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17212b;
+      --muted: #66727c;
+      --paper: #f5f1e9;
+      --panel: #fffdf8;
+      --accent: #bc4b35;
+      --accent-dark: #8f3527;
+      --line: #ded6c9;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: radial-gradient(circle at 12% 8%, #e8c7a5 0, transparent 28%), var(--paper);
+      font-family: Georgia, "Times New Roman", serif;
+    }
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+      gap: clamp(2rem, 8vw, 8rem);
+      align-items: center;
+      max-width: 1180px;
+      min-height: 100vh;
+      margin: auto;
+      padding: 3rem clamp(1.25rem, 5vw, 5rem);
+    }
+    .intro { max-width: 560px; }
+    .eyebrow {
+      margin: 0 0 1.5rem;
+      color: var(--accent-dark);
+      font: 700 .78rem/1.2 Arial, sans-serif;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(3.3rem, 8vw, 6.4rem);
+      line-height: .88;
+      letter-spacing: -.04em;
+    }
+    .intro p {
+      max-width: 430px;
+      margin: 2rem 0 0;
+      color: var(--muted);
+      font-size: 1.2rem;
+      line-height: 1.55;
+    }
+    .panel {
+      padding: clamp(1.5rem, 4vw, 2.6rem);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 12px 16px 0 rgba(23, 33, 43, .08);
+    }
+    h2 { margin: 0 0 .45rem; font-size: 2rem; }
+    .subcopy { margin: 0 0 1.8rem; color: var(--muted); line-height: 1.45; }
+    form { display: grid; gap: 1rem; }
+    label { display: grid; gap: .4rem; font: 700 .78rem/1.2 Arial, sans-serif; text-transform: uppercase; }
+    input {
+      width: 100%;
+      padding: .8rem .85rem;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      color: var(--ink);
+      background: #fff;
+      font: 1rem Georgia, "Times New Roman", serif;
+    }
+    input:focus { outline: 2px solid #e3a58a; border-color: var(--accent); }
+    button {
+      padding: .85rem 1rem;
+      border: 0;
+      border-radius: 4px;
+      color: #fff;
+      background: var(--accent);
+      cursor: pointer;
+      font: 700 .9rem Arial, sans-serif;
+    }
+    button:hover { background: var(--accent-dark); }
+    .switch {
+      margin: 1.2rem 0 0;
+      color: var(--muted);
+      font: .88rem Arial, sans-serif;
+      text-align: center;
+    }
+    .switch button { padding: 0; color: var(--accent-dark); background: transparent; text-decoration: underline; }
+    .message { min-height: 1.25rem; margin: 1rem 0 0; color: var(--accent-dark); font: .9rem Arial, sans-serif; }
+    @media (max-width: 760px) {
+      main { grid-template-columns: 1fr; align-content: center; gap: 2.5rem; }
+      .intro p { margin-top: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">A quieter way to keep knowledge</p>
+      <h1 id="page-title">Wiki<br>Wrangler</h1>
+      <p>Capture the useful fragments, shape them into durable notes, and keep your team wiki worth returning to.</p>
+    </section>
+    <section class="panel" aria-live="polite">
+      <h2 id="form-title">Welcome back</h2>
+      <p class="subcopy" id="form-copy">Sign in to continue to your inbox.</p>
+      <form id="auth-form">
+        <label id="name-field" hidden>
+          Display name
+          <input id="display-name" name="display_name" autocomplete="name">
+        </label>
+        <label>
+          Email
+          <input id="email" name="email" type="email" autocomplete="email" required>
+        </label>
+        <label>
+          Password
+          <input id="password" name="password" type="password" minlength="8" autocomplete="current-password" required>
+        </label>
+        <button id="submit-button" type="submit">Sign in</button>
+      </form>
+      <p class="message" id="message" role="status"></p>
+      <p class="switch"><span id="switch-copy">New here?</span> <button id="switch-button" type="button">Create an account</button></p>
+    </section>
+  </main>
+  <script>
+    const form = document.querySelector("#auth-form");
+    const nameField = document.querySelector("#name-field");
+    const displayName = document.querySelector("#display-name");
+    const formTitle = document.querySelector("#form-title");
+    const formCopy = document.querySelector("#form-copy");
+    const submitButton = document.querySelector("#submit-button");
+    const switchCopy = document.querySelector("#switch-copy");
+    const switchButton = document.querySelector("#switch-button");
+    const message = document.querySelector("#message");
+    let registering = false;
+
+    function setMode(nextRegistering) {
+      registering = nextRegistering;
+      nameField.hidden = !registering;
+      displayName.required = registering;
+      formTitle.textContent = registering ? "Create your account" : "Welcome back";
+      formCopy.textContent = registering ? "Start with a local curator account." : "Sign in to continue to your inbox.";
+      submitButton.textContent = registering ? "Create account" : "Sign in";
+      switchCopy.textContent = registering ? "Already have an account?" : "New here?";
+      switchButton.textContent = registering ? "Sign in" : "Create an account";
+    }
+
+    switchButton.addEventListener("click", () => {
+      setMode(!registering);
+      message.textContent = "";
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      message.textContent = "Working...";
+      const payload = { email: form.email.value, password: form.password.value };
+      if (registering) payload.display_name = form.display_name.value;
+      const endpoint = registering ? "/api/auth/register" : "/api/auth/login";
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(payload)
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Authentication failed");
+        message.textContent = registering
+          ? `Account created. Signed in as ${body.display_name}.`
+          : `Signed in as ${body.display_name}.`;
+        if (registering) {
+          setMode(false);
+          displayName.value = "";
+        }
+      } catch (error) {
+        message.textContent = error.message;
+      }
+    });
+  </script>
+</body>
+</html>

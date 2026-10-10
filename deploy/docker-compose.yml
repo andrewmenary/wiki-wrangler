@@ -1,6 +1,15 @@
 name: wiki-wrangler
 
 services:
+  web:
+    image: wiki-wrangler-web:latest
+    build:
+      context: ../web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
   api:
     image: wiki-wrangler-api:latest
     build:
