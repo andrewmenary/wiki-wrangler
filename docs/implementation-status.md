@@ -85,6 +85,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Repository Settings UI
 - [ ] Publish worker
   - [x] Tested Git worktree publisher core for raw/curated writes and idempotent commits
+  - [x] Clone/update/push orchestration core with branch-aware integration coverage
 - [ ] Raw and curated Git paths
   - [x] Approved-item publication path preview API
 - [ ] Publication records and commit links

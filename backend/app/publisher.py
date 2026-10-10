@@ -67,3 +67,47 @@ def publish_worktree(
 
     _run_git(worktree, "commit", "-m", commit_message)
     return PublishResult(_run_git(worktree, "rev-parse", "HEAD"), changed=True)
+
+
+def _clone_or_update_worktree(remote_url: str, workspace: Path, branch: str) -> None:
+    if not (workspace / ".git").exists():
+        workspace.parent.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(
+            ["git", "clone", "--branch", branch, remote_url, str(workspace)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            message = result.stderr.strip() or result.stdout.strip() or "Git clone failed"
+            raise PublishError(message)
+        return
+
+    _run_git(workspace, "fetch", "origin", branch)
+    _run_git(workspace, "checkout", branch)
+    _run_git(workspace, "merge", "--ff-only", f"origin/{branch}")
+
+
+def publish_remote(
+    remote_url: str,
+    workspace: Path,
+    branch: str,
+    raw_source: Path,
+    raw_path: str,
+    curated_path: str,
+    curated_markdown: str,
+    commit_message: str,
+) -> PublishResult:
+    """Clone or update a worker checkout, publish files, and push changed commits."""
+    _clone_or_update_worktree(remote_url, workspace, branch)
+    result = publish_worktree(
+        workspace,
+        raw_source,
+        raw_path,
+        curated_path,
+        curated_markdown,
+        commit_message,
+    )
+    if result.changed:
+        _run_git(workspace, "push", "origin", branch)
+    return result
