@@ -93,6 +93,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Synchronous approved-item publish API boundary
 - [ ] Raw and curated Git paths
   - [x] Approved-item publication path preview API
+  - [x] Curated front matter links back to source and raw path
 - [ ] Publication records and commit links
   - [x] Publication and audit schema foundation
   - [x] Publish API persists commit and resolved path metadata

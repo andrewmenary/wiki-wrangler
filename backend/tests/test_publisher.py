@@ -1,6 +1,6 @@
 import subprocess
 
-from app.publisher import publish_remote, publish_worktree
+from app.publisher import build_curated_document, publish_remote, publish_worktree
 
 
 def initialize_git_repository(path):
@@ -9,6 +9,21 @@ def initialize_git_repository(path):
     subprocess.run(
         ["git", "-C", str(path), "config", "user.email", "wiki@example.com"], check=True
     )
+
+
+def test_build_curated_document_includes_provenance() -> None:
+    document = build_curated_document(
+        "Service Guide",
+        "Restart instructions",
+        "https://example.com/guide",
+        "raw/web/item-1/source.html",
+        "# Guide\n",
+    )
+
+    assert 'title: "Service Guide"' in document
+    assert 'source: "https://example.com/guide"' in document
+    assert 'raw_path: "raw/web/item-1/source.html"' in document
+    assert document.endswith("# Guide\n")
 
 
 def test_publish_worktree_writes_both_paths_and_is_idempotent(tmp_path) -> None:

@@ -22,7 +22,7 @@ from app.db import (
     initialize_database,
 )
 from app.domain.items import ItemStatus, can_transition
-from app.publisher import publish_remote
+from app.publisher import build_curated_document, publish_remote
 
 
 class CaptureRequest(BaseModel):
@@ -783,8 +783,10 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 text(
                     """
                     SELECT items.title, items.markdown_final, attachments.storage_path,
+                        items.summary, source_submissions.source_ref,
                         repositories.remote_url, repositories.default_branch
                     FROM items
+                    JOIN source_submissions ON source_submissions.id = items.submission_id
                     JOIN repositories ON repositories.id = :repository_id
                     LEFT JOIN attachments ON attachments.item_id = items.id
                     WHERE items.id = :item_id
@@ -811,7 +813,13 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 raw_source,
                 preview["raw_path"],
                 preview["curated_path"],
-                item["markdown_final"] or "",
+                build_curated_document(
+                    item["title"],
+                    item["summary"],
+                    item["source_ref"],
+                    preview["raw_path"],
+                    item["markdown_final"] or "",
+                ),
                 f"Publish {item['title']}",
             )
         except Exception as error:

@@ -1,3 +1,4 @@
+import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,25 @@ class PublishError(RuntimeError):
 class PublishResult:
     commit_sha: str
     changed: bool
+
+
+def build_curated_document(
+    title: str,
+    summary: str | None,
+    source_ref: str | None,
+    raw_path: str,
+    markdown: str,
+) -> str:
+    """Add stable provenance metadata to the curated Markdown document."""
+    front_matter = [
+        "---",
+        f"title: {json.dumps(title)}",
+        f"summary: {json.dumps(summary or '')}",
+        f"source: {json.dumps(source_ref or '')}",
+        f"raw_path: {json.dumps(raw_path)}",
+        "---",
+    ]
+    return "\n".join(front_matter) + "\n\n" + markdown.rstrip() + "\n"
 
 
 def _run_git(worktree: Path, *arguments: str) -> str:
