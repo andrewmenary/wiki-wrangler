@@ -108,24 +108,18 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   expect(category.status()).toBe(201);
   const categoryBody = await category.json();
 
-  const upload = await page.request.post("/api/items/upload", {
-    multipart: {
-      file: {
-        name: "runbook.txt",
-        mimeType: "text/plain",
-        buffer: Buffer.from("Restart the service after changing configuration."),
-      },
-      title: "Service restart runbook",
-    },
-  });
-  expect(upload.status()).toBe(201);
-  const uploadBody = await upload.json();
-
-  const conversion = await page.request.post(`/api/items/${uploadBody.id}/convert`);
-  expect(conversion.status()).toBe(200);
-
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await page.getByLabel("Capture title").fill("Service restart runbook");
+  await page.getByLabel("Upload a Markdown or text file").setInputFiles({
+    name: "runbook.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Restart the service after changing configuration."),
+  });
+  await page.getByRole("button", { name: "Upload and convert" }).click();
+  await expect(page.locator("#capture-message")).toHaveText(
+    "Uploaded and converted. Added to inbox.",
+  );
   const item = page.locator(".item").filter({ hasText: "Service restart runbook" });
   await expect(item).toBeVisible();
   await item.getByRole("button").click();
@@ -143,7 +137,8 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   await expect(page.locator("#review-message")).toHaveText("Approved for publishing.");
   await expect(item).toContainText("approved");
 
-  const detail = await page.request.get(`/api/items/${uploadBody.id}`);
+  const itemId = await item.getByRole("button").getAttribute("data-item-id");
+  const detail = await page.request.get(`/api/items/${itemId}`);
   expect(detail.status()).toBe(200);
   const detailBody = await detail.json();
   expect(detailBody.status).toBe("approved");

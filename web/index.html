@@ -178,6 +178,17 @@
           </label>
           <button type="submit">Add to inbox</button>
         </form>
+        <form class="capture-form" id="upload-form">
+          <label>
+            Upload a Markdown or text file
+            <input id="file-input" type="file" accept=".md,.txt" required>
+          </label>
+          <label>
+            Capture title
+            <input id="file-title" type="text" placeholder="Optional title">
+          </label>
+          <button type="submit">Upload and convert</button>
+        </form>
         <p class="message" id="capture-message" role="status"></p>
         <div class="inbox">
           <div class="inbox-label">Recent captures</div>
@@ -253,6 +264,9 @@
     const itemList = document.querySelector("#item-list");
     const urlForm = document.querySelector("#url-form");
     const urlInput = document.querySelector("#url-input");
+    const uploadForm = document.querySelector("#upload-form");
+    const fileInput = document.querySelector("#file-input");
+    const fileTitle = document.querySelector("#file-title");
     const captureMessage = document.querySelector("#capture-message");
     const reviewView = document.querySelector("#review-view");
     const reviewTitle = document.querySelector("#review-title");
@@ -490,6 +504,34 @@
         if (!response.ok) throw new Error(body.detail || "Could not capture URL");
         urlInput.value = "";
         captureMessage.textContent = "Added to inbox.";
+        await loadItems();
+      } catch (error) {
+        captureMessage.textContent = error.message;
+      }
+    });
+
+    uploadForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const file = fileInput.files[0];
+      if (!file) return;
+      captureMessage.textContent = "Uploading and converting...";
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        if (fileTitle.value.trim()) formData.append("title", fileTitle.value);
+        const uploadResponse = await fetch("/api/items/upload", {
+          method: "POST", credentials: "same-origin", body: formData
+        });
+        const uploadBody = await uploadResponse.json();
+        if (!uploadResponse.ok) throw new Error(uploadBody.detail || "Could not upload file");
+        const convertResponse = await fetch(`/api/items/${encodeURIComponent(uploadBody.id)}/convert`, {
+          method: "POST", credentials: "same-origin"
+        });
+        const convertBody = await convertResponse.json();
+        if (!convertResponse.ok) throw new Error(convertBody.detail || "Could not convert file");
+        fileInput.value = "";
+        fileTitle.value = "";
+        captureMessage.textContent = "Uploaded and converted. Added to inbox.";
         await loadItems();
       } catch (error) {
         captureMessage.textContent = error.message;

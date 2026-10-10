@@ -96,6 +96,6 @@ configuration, while partial items are intentionally called out in the notes.
 - [x] Configure Playwright suite in CI
 - [x] Committed Playwright test verifies category create/list/edit/delete,
       duplicate-path errors, and edit persistence after refresh
-- [x] Committed Playwright test verifies upload, conversion, review metadata,
+- [x] Committed Playwright test verifies UI upload and conversion, review metadata,
       category assignment, and approval
 - [x] Isolate Playwright test data using a disposable Compose stack on port 8081
