@@ -82,3 +82,10 @@ configuration, while partial items are intentionally called out in the notes.
 - [x] Editor diagnostics clear for touched Python files
 - [x] Docker Compose naming verified in configuration
 - [x] CI validates the same checks automatically on GitHub
+- [x] Browser smoke test through Compose and Playwright tooling
+  - [x] Login and registration mode behavior
+  - [x] Display Name hidden during sign-in
+  - [x] Registration transitions to the Inbox
+  - [x] Inbox loads captures and categories
+- [ ] Repeat browser smoke test after future UI changes
+- [ ] Add committed automated Playwright test suite
