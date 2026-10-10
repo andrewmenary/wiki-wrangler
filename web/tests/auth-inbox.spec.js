@@ -63,6 +63,7 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
   const originalPath = `test-${unique}/notes`;
   const editedPath = `test-${unique}/guides`;
   await categoryForm.getByLabel("Name", { exact: true }).fill("Notes");
+  await expect(categoryForm.getByLabel("Path segment", { exact: true })).toHaveValue("notes");
   await categoryForm.getByLabel("Path segment", { exact: true }).fill("notes");
   await expect(categoryForm.locator(`#category-parent option[value="${parentBody.id}"]`)).toHaveCount(1);
   await categoryForm.locator("#category-parent").selectOption(parentBody.id);

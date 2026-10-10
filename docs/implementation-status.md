@@ -71,7 +71,7 @@ configuration, while partial items are intentionally called out in the notes.
 - [x] Status transition API
 - [x] Domain-level status transition rules
 - [x] Category CRUD and hierarchy API with validated slugs and derived paths
-- [x] Category management Settings UI with parent-aware path segments
+- [x] Category management Settings UI with generated slugs and parent-aware path segments
 
 ## Phase 3 - Git Publishing
 

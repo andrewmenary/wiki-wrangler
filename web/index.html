@@ -292,6 +292,7 @@
     let categories = [];
     let selectedItem = null;
     let editingCategoryId = null;
+    let categoryPathTouched = false;
     let registering = false;
 
     function setMode(nextRegistering) {
@@ -457,6 +458,7 @@
         categoryPath.value = "";
         categoryParent.value = "";
         editingCategoryId = null;
+        categoryPathTouched = false;
         categoryForm.querySelector("button[type=submit]").textContent = "Create category";
         categoryMessage.textContent = "Category saved.";
         await loadCategories();
@@ -472,6 +474,7 @@
         const category = categories.find((entry) => entry.id === editButton.dataset.editCategory);
         if (!category) return;
         editingCategoryId = category.id;
+        categoryPathTouched = true;
         categoryName.value = category.name;
         categoryPath.value = category.slug || category.path.split("/").pop();
         categoryParent.value = category.parent_id || "";
@@ -489,6 +492,18 @@
           : (body.detail || "Could not delete category");
         if (response.ok) await loadCategories();
       }
+    });
+
+    categoryName.addEventListener("input", () => {
+      if (editingCategoryId || categoryPathTouched) return;
+      categoryPath.value = categoryName.value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    });
+
+    categoryPath.addEventListener("input", () => {
+      categoryPathTouched = true;
     });
 
     document.querySelector("#logout-button").addEventListener("click", async () => {
