@@ -166,6 +166,11 @@ async def test_upload_stores_raw_file_as_inbox_item(
     assert len(stored_files) == 1
     assert stored_files[0].read_bytes() == b"Meeting notes"
 
+    source = await authenticated_client.get(f"/api/items/{response.json()['id']}/source")
+    assert source.status_code == 200
+    assert source.json()["filename"] == "notes.txt"
+    assert source.json()["content"] == "Meeting notes"
+
 
 async def test_upload_rejects_unsupported_file_type(
     authenticated_client: httpx.AsyncClient,

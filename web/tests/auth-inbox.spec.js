@@ -139,6 +139,10 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
 
   await expect(page.locator("#review-title")).toHaveText("Service restart runbook");
   await expect(page.locator("#review-source")).toHaveText("Source: runbook.txt");
+  await page.getByText("View original source", { exact: true }).click();
+  await expect(page.locator("#review-source-content")).toHaveText(
+    "Restart the service after changing configuration.",
+  );
   await expect(page.locator("#review-generated")).toHaveText(
     "Restart the service after changing configuration.",
   );

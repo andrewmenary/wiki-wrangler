@@ -66,6 +66,7 @@ class CategoryUpdateRequest(BaseModel):
 ALLOWED_UPLOAD_EXTENSIONS = {".csv", ".docx", ".md", ".pdf", ".pptx", ".txt", ".xlsx"}
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 MAX_URL_SIZE = 10 * 1024 * 1024
+MAX_SOURCE_PREVIEW_SIZE = 200_000
 SESSION_COOKIE = "wiki_wrangler_session"
 SESSION_LIFETIME = timedelta(hours=12)
 CATEGORY_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -523,6 +524,56 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         result["tags"] = json.loads(result.pop("tags_json") or "[]")
         result["attachments"] = [dict(attachment) for attachment in attachments]
         return result
+
+    @app.get("/api/items/{item_id}/source", dependencies=[Depends(require_session)])
+    def get_item_source(item_id: str) -> dict[str, object]:
+        with engine.connect() as connection:
+            attachment = connection.execute(
+                text(
+                    """
+                    SELECT attachments.filename, attachments.mime_type, attachments.storage_path
+                    FROM attachments
+                    JOIN items ON items.id = attachments.item_id
+                    WHERE attachments.item_id = :item_id
+                    ORDER BY attachments.created_at
+                    LIMIT 1
+                    """
+                ),
+                {"item_id": item_id},
+            ).mappings().first()
+        if attachment is None:
+            raise HTTPException(status_code=404, detail="Source not found")
+
+        filename = attachment["filename"]
+        mime_type = attachment["mime_type"] or "application/octet-stream"
+        previewable = (
+            mime_type.startswith("text/")
+            or Path(filename).suffix.lower() in {".html", ".md", ".txt"}
+        )
+        if not previewable:
+            return {
+                "filename": filename,
+                "mime_type": mime_type,
+                "preview_available": False,
+                "content": None,
+            }
+
+        try:
+            with (storage_root / attachment["storage_path"]).open("rb") as source_file:
+                content = source_file.read(MAX_SOURCE_PREVIEW_SIZE + 1)
+            truncated = len(content) > MAX_SOURCE_PREVIEW_SIZE
+            if truncated:
+                content = content[:MAX_SOURCE_PREVIEW_SIZE]
+            text_content = content.decode("utf-8", errors="replace")
+        except OSError as error:
+            raise HTTPException(status_code=404, detail="Source file unavailable") from error
+        return {
+            "filename": filename,
+            "mime_type": mime_type,
+            "preview_available": True,
+            "truncated": truncated,
+            "content": text_content,
+        }
 
     @app.patch("/api/items/{item_id}", dependencies=[Depends(require_session)])
     def update_item(item_id: str, request: ItemUpdateRequest) -> dict[str, object]:

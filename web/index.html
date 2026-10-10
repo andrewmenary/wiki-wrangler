@@ -119,6 +119,9 @@
     .review h3 { margin: 0 0 1rem; font-size: 1.35rem; }
     .review-meta { display: grid; gap: .8rem; margin-bottom: 1rem; }
     .review-source { margin: 0 0 1rem; color: var(--muted); font: .78rem Arial, sans-serif; }
+    .source-preview { margin: 0 0 1rem; border: 1px solid var(--line); }
+    .source-preview summary { padding: .65rem .8rem; cursor: pointer; color: var(--accent-dark); font: 700 .75rem Arial, sans-serif; }
+    .source-preview pre { max-height: 220px; margin: 0; padding: .8rem; overflow: auto; border-top: 1px solid var(--line); background: #f7f2eb; white-space: pre-wrap; font: .78rem/1.5 Consolas, monospace; }
     .generated-preview { margin: 0 0 1rem; padding: .8rem; max-height: 220px; overflow: auto; border: 1px solid var(--line); background: #f7f2eb; white-space: pre-wrap; font: .82rem/1.5 Consolas, monospace; }
     .markdown-toolbar { display: flex; gap: .35rem; margin-bottom: .5rem; }
     .markdown-toolbar button { padding: .45rem .7rem; font-size: .75rem; }
@@ -237,6 +240,10 @@
         <div class="review" id="review-view" hidden>
           <h3 id="review-title"></h3>
           <p class="review-source" id="review-source"></p>
+          <details class="source-preview">
+            <summary>View original source</summary>
+            <pre id="review-source-content">Loading source...</pre>
+          </details>
           <div class="review-meta">
             <label>
               Title
@@ -332,6 +339,7 @@
     const reviewView = document.querySelector("#review-view");
     const reviewTitle = document.querySelector("#review-title");
     const reviewSource = document.querySelector("#review-source");
+    const reviewSourceContent = document.querySelector("#review-source-content");
     const reviewGenerated = document.querySelector("#review-generated");
     const reviewItemTitle = document.querySelector("#review-item-title");
     const reviewSummary = document.querySelector("#review-summary");
@@ -427,6 +435,18 @@
       reviewSource.textContent = selectedItem.attachments.length
         ? `Source: ${selectedItem.attachments.map((attachment) => attachment.filename).join(", ")}`
         : `Source: ${selectedItem.source_ref || selectedItem.source_type}`;
+      reviewSourceContent.textContent = "Loading source...";
+      try {
+        const sourceResponse = await fetch(`/api/items/${encodeURIComponent(itemId)}/source`, {
+          credentials: "same-origin"
+        });
+        const source = sourceResponse.ok ? await sourceResponse.json() : null;
+        reviewSourceContent.textContent = source?.preview_available
+          ? `${source.content}${source.truncated ? "\n\n[Preview truncated]" : ""}`
+          : "Inline preview is unavailable for this source type.";
+      } catch (error) {
+        reviewSourceContent.textContent = "Inline preview is unavailable for this source.";
+      }
       reviewGenerated.textContent = selectedItem.markdown_generated || "No generated Markdown available.";
       reviewItemTitle.value = selectedItem.title;
       reviewSummary.value = selectedItem.summary || "";
