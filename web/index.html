@@ -119,6 +119,7 @@
     .review h3 { margin: 0 0 1rem; font-size: 1.35rem; }
     .review-meta { display: grid; gap: .8rem; margin-bottom: 1rem; }
     .review-source { margin: 0 0 1rem; color: var(--muted); font: .78rem Arial, sans-serif; }
+    .publication-preview { margin: 0 0 1rem; padding: .65rem .8rem; border-left: 3px solid var(--accent); color: var(--muted); background: #f7f2eb; font: .78rem/1.45 Arial, sans-serif; }
     .source-preview { margin: 0 0 1rem; border: 1px solid var(--line); }
     .source-preview summary { padding: .65rem .8rem; cursor: pointer; color: var(--accent-dark); font: 700 .75rem Arial, sans-serif; }
     .source-preview pre { max-height: 220px; margin: 0; padding: .8rem; overflow: auto; border-top: 1px solid var(--line); background: #f7f2eb; white-space: pre-wrap; font: .78rem/1.5 Consolas, monospace; }
@@ -253,6 +254,7 @@
         <div class="review" id="review-view" hidden>
           <h3 id="review-title"></h3>
           <p class="review-source" id="review-source"></p>
+          <p class="publication-preview" id="publication-preview" hidden></p>
           <details class="source-preview">
             <summary>View original source</summary>
             <pre id="review-source-content">Loading source...</pre>
@@ -388,6 +390,7 @@
     const reviewView = document.querySelector("#review-view");
     const reviewTitle = document.querySelector("#review-title");
     const reviewSource = document.querySelector("#review-source");
+    const publicationPreview = document.querySelector("#publication-preview");
     const reviewSourceContent = document.querySelector("#review-source-content");
     const reviewGenerated = document.querySelector("#review-generated");
     const reviewItemTitle = document.querySelector("#review-item-title");
@@ -512,6 +515,19 @@
       reviewSource.textContent = selectedItem.attachments.length
         ? `Source: ${selectedItem.attachments.map((attachment) => attachment.filename).join(", ")}`
         : `Source: ${selectedItem.source_ref || selectedItem.source_type}`;
+      publicationPreview.hidden = true;
+      if (selectedItem.status === "approved") {
+        const publicationResponse = await fetch(
+          `/api/items/${encodeURIComponent(itemId)}/publication-preview`,
+          { credentials: "same-origin" },
+        );
+        if (publicationResponse.ok) {
+          const publication = await publicationResponse.json();
+          publicationPreview.textContent =
+            `Publishes to ${publication.repository_name}: ${publication.curated_path}`;
+          publicationPreview.hidden = false;
+        }
+      }
       reviewSourceContent.textContent = "Loading source...";
       try {
         const sourceResponse = await fetch(`/api/items/${encodeURIComponent(itemId)}/source`, {
