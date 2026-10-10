@@ -259,6 +259,7 @@
           <h3 id="review-title"></h3>
           <p class="review-source" id="review-source"></p>
           <p class="publication-preview" id="publication-preview" hidden></p>
+          <p class="publication-preview" id="publication-history" hidden></p>
           <details class="source-preview">
             <summary>View original source</summary>
             <pre id="review-source-content">Loading source...</pre>
@@ -401,6 +402,7 @@
     const reviewTitle = document.querySelector("#review-title");
     const reviewSource = document.querySelector("#review-source");
     const publicationPreview = document.querySelector("#publication-preview");
+    const publicationHistory = document.querySelector("#publication-history");
     const reviewSourceContent = document.querySelector("#review-source-content");
     const reviewGenerated = document.querySelector("#review-generated");
     const reviewItemTitle = document.querySelector("#review-item-title");
@@ -539,6 +541,7 @@
         ? `Source: ${selectedItem.attachments.map((attachment) => attachment.filename).join(", ")}`
         : `Source: ${selectedItem.source_ref || selectedItem.source_type}`;
       publicationPreview.hidden = true;
+      publicationHistory.hidden = true;
       if (selectedItem.status === "approved") {
         const publicationResponse = await fetch(
           `/api/items/${encodeURIComponent(itemId)}/publication-preview`,
@@ -549,6 +552,19 @@
           publicationPreview.textContent =
             `Publishes to ${publication.repository_name}: ${publication.curated_path}`;
           publicationPreview.hidden = false;
+        }
+      }
+      if (selectedItem.status === "published") {
+        const publicationResponse = await fetch(
+          `/api/items/${encodeURIComponent(itemId)}/publication`,
+          { credentials: "same-origin" },
+        );
+        if (publicationResponse.ok) {
+          const publication = await publicationResponse.json();
+          publicationHistory.textContent =
+            `Published to ${publication.repository_name} in commit ${publication.commit_sha}. ` +
+            `Path: ${publication.curated_path}`;
+          publicationHistory.hidden = false;
         }
       }
       reviewSourceContent.textContent = "Loading source...";
@@ -570,7 +586,7 @@
       reviewCategory.value = selectedItem.category_id || "";
       reviewMarkdown.value = selectedItem.markdown_final || selectedItem.markdown_generated || "";
       setMarkdownMode(false);
-      reviewSave.hidden = ["approved", "archived"].includes(selectedItem.status);
+      reviewSave.hidden = ["approved", "published", "archived"].includes(selectedItem.status);
       reviewApprove.hidden = selectedItem.status !== "review";
       reviewArchive.hidden = !["inbox", "draft", "review", "error"].includes(selectedItem.status);
       reviewPublish.hidden = selectedItem.status !== "approved";

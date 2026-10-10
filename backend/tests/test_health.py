@@ -271,6 +271,10 @@ async def test_approved_item_can_be_published_and_recorded(
     assert published.status_code == 200
     assert published.json()["status"] == "published"
     assert published.json()["commit_sha"] == "abc123"
+    publication = await authenticated_client.get(f"/api/items/{item_id}/publication")
+    assert publication.status_code == 200
+    assert publication.json()["commit_sha"] == "abc123"
+    assert publication.json()["curated_path"] == "curated/runbooks/service-guide.md"
     audit = await authenticated_client.get(f"/api/audit?item_id={item_id}")
     assert any(event["action"] == "item.published" for event in audit.json())
 

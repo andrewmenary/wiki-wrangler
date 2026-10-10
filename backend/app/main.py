@@ -869,6 +869,28 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             "curated_path": preview["curated_path"],
         }
 
+    @app.get("/api/items/{item_id}/publication", dependencies=[Depends(require_session)])
+    def get_publication(item_id: str) -> dict[str, object]:
+        with engine.connect() as connection:
+            publication = connection.execute(
+                text(
+                    """
+                    SELECT publications.id, publications.item_id, publications.repository_id,
+                        publications.raw_path, publications.curated_path,
+                        publications.commit_sha, publications.branch,
+                        publications.pr_url, publications.published_at,
+                        repositories.name AS repository_name
+                    FROM publications
+                    JOIN repositories ON repositories.id = publications.repository_id
+                    WHERE publications.item_id = :item_id
+                    """
+                ),
+                {"item_id": item_id},
+            ).mappings().first()
+        if publication is None:
+            raise HTTPException(status_code=404, detail="Publication not found")
+        return dict(publication)
+
     @app.get("/api/items/{item_id}/source", dependencies=[Depends(require_session)])
     def get_item_source(item_id: str) -> dict[str, object]:
         with engine.connect() as connection:
