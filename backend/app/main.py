@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -67,6 +68,17 @@ MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 MAX_URL_SIZE = 10 * 1024 * 1024
 SESSION_COOKIE = "wiki_wrangler_session"
 SESSION_LIFETIME = timedelta(hours=12)
+CATEGORY_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def normalize_category_slug(value: str) -> str:
+    slug = value.strip().strip("/")
+    if not CATEGORY_SLUG_PATTERN.fullmatch(slug):
+        raise HTTPException(
+            status_code=422,
+            detail="Category path must be a lowercase hyphenated slug",
+        )
+    return slug
 
 
 def create_app(database_url: str | None = None, storage_path: Path | None = None) -> FastAPI:
@@ -233,24 +245,32 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     ORDER BY path
                     """)
             ).mappings().all()
-        return [dict(row) for row in rows]
+        categories = []
+        for row in rows:
+            category = dict(row)
+            category["slug"] = category["path"].rsplit("/", maxsplit=1)[-1]
+            categories.append(category)
+        return categories
 
     @app.post("/api/categories", status_code=201, dependencies=[Depends(require_session)])
     def create_category(request: CategoryRequest) -> dict[str, object]:
         name = request.name.strip()
-        path = request.path.strip().strip("/")
-        if not name or not path:
+        if not name or not request.path.strip():
             raise HTTPException(status_code=422, detail="Category name and path are required")
 
         category_id = str(uuid4())
         with engine.begin() as connection:
+            parent_path = None
             if request.parent_id is not None:
                 parent = connection.execute(
-                    text("SELECT id FROM categories WHERE id = :parent_id"),
+                    text("SELECT id, path FROM categories WHERE id = :parent_id"),
                     {"parent_id": request.parent_id},
-                ).first()
+                ).mappings().first()
                 if parent is None:
                     raise HTTPException(status_code=422, detail="Parent category not found")
+                parent_path = parent["path"]
+            slug = normalize_category_slug(request.path)
+            path = f"{parent_path}/{slug}" if parent_path else slug
             try:
                 connection.execute(
                     text("""
@@ -270,7 +290,13 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                         status_code=409, detail="Category path already exists"
                     ) from error
                 raise
-        return {"id": category_id, "name": name, "path": path, "parent_id": request.parent_id}
+        return {
+            "id": category_id,
+            "name": name,
+            "slug": slug,
+            "path": path,
+            "parent_id": request.parent_id,
+        }
 
     @app.patch("/api/categories/{category_id}", dependencies=[Depends(require_session)])
     def update_category(
@@ -287,20 +313,21 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 raise HTTPException(status_code=404, detail="Category not found")
             if request.parent_id == category_id:
                 raise HTTPException(status_code=422, detail="Category cannot be its own parent")
-            if request.parent_id is not None:
-                parent = connection.execute(
-                    text("SELECT id FROM categories WHERE id = :parent_id"),
-                    {"parent_id": request.parent_id},
-                ).first()
-                if parent is None:
-                    raise HTTPException(status_code=422, detail="Parent category not found")
             name = request.name.strip() if request.name is not None else category["name"]
-            path = request.path.strip().strip("/") if request.path is not None else category["path"]
             parent_id = (
                 request.parent_id
                 if "parent_id" in request.model_fields_set
                 else category["parent_id"]
             )
+            parent_path = None
+            if parent_id is not None:
+                parent = connection.execute(
+                    text("SELECT id, path FROM categories WHERE id = :parent_id"),
+                    {"parent_id": parent_id},
+                ).mappings().first()
+                if parent is None:
+                    raise HTTPException(status_code=422, detail="Parent category not found")
+                parent_path = parent["path"]
             if parent_id is not None:
                 ancestor_id = parent_id
                 visited: set[str] = set()
@@ -316,7 +343,13 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                         {"category_id": ancestor_id},
                     ).first()
                     ancestor_id = ancestor[0] if ancestor is not None else None
-            if not name or not path:
+            slug = (
+                normalize_category_slug(request.path)
+                if request.path is not None
+                else category["path"].rsplit("/", maxsplit=1)[-1]
+            )
+            path = f"{parent_path}/{slug}" if parent_path else slug
+            if not name:
                 raise HTTPException(status_code=422, detail="Category name and path are required")
             try:
                 connection.execute(
@@ -332,6 +365,22 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                         "parent_id": parent_id,
                     },
                 )
+                if path != category["path"]:
+                    descendants = connection.execute(
+                        text(
+                            "SELECT id, path FROM categories "
+                            "WHERE path LIKE :path_prefix"
+                        ),
+                        {"path_prefix": f"{category['path']}/%"},
+                    ).mappings().all()
+                    for descendant in descendants:
+                        descendant_path = descendant["path"].replace(
+                            f"{category['path']}/", f"{path}/", 1
+                        )
+                        connection.execute(
+                            text("UPDATE categories SET path = :path WHERE id = :id"),
+                            {"id": descendant["id"], "path": descendant_path},
+                        )
             except Exception as error:
                 if "UNIQUE constraint failed: categories.path" in str(error):
                     raise HTTPException(
@@ -341,6 +390,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         return {
             "id": category_id,
             "name": name,
+            "slug": slug,
             "path": path,
             "parent_id": parent_id,
         }

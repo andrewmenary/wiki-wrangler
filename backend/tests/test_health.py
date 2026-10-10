@@ -244,11 +244,16 @@ async def test_categories_support_hierarchy_and_item_assignment(
         json={"name": "Processes", "path": "processes"},
     )
     assert parent.status_code == 201
+    invalid_slug = await authenticated_client.post(
+        "/api/categories",
+        json={"name": "Invalid", "path": "Process_Notes"},
+    )
+    assert invalid_slug.status_code == 422
     child = await authenticated_client.post(
         "/api/categories",
         json={
             "name": "Onboarding",
-            "path": "processes/onboarding",
+            "path": "onboarding",
             "parent_id": parent.json()["id"],
         },
     )
@@ -266,6 +271,12 @@ async def test_categories_support_hierarchy_and_item_assignment(
     assert assignment.status_code == 200
     detail = await authenticated_client.get(f"/api/items/{item_id}")
     assert detail.json()["category_path"] == "processes/onboarding"
+
+    duplicate = await authenticated_client.post(
+        "/api/categories",
+        json={"name": "Other", "path": "onboarding", "parent_id": parent.json()["id"]},
+    )
+    assert duplicate.status_code == 409
 
     cleared_assignment = await authenticated_client.patch(
         f"/api/items/{item_id}",
@@ -289,18 +300,12 @@ async def test_categories_support_hierarchy_and_item_assignment(
     )
     assert reassigned.status_code == 200
 
-    duplicate = await authenticated_client.post(
-        "/api/categories",
-        json={"name": "Other", "path": "processes/onboarding"},
-    )
-    assert duplicate.status_code == 409
-
     edited = await authenticated_client.patch(
         f"/api/categories/{child.json()['id']}",
-        json={"name": "New Hire Onboarding", "path": "processes/new-hire-onboarding"},
+        json={"name": "New Hire Onboarding", "path": "new-hire-onboarding"},
     )
     assert edited.status_code == 200
-    assert edited.json()["path"] == "processes/new-hire-onboarding"
+    assert edited.json()["path"] == "new-hire-onboarding"
 
     assigned_delete = await authenticated_client.delete(f"/api/categories/{edited.json()['id']}")
     assert assigned_delete.status_code == 409
@@ -322,12 +327,22 @@ async def test_category_updates_reject_ancestry_cycles(
     )
     middle = await authenticated_client.post(
         "/api/categories",
-        json={"name": "Middle", "path": "root/middle", "parent_id": root.json()["id"]},
+        json={"name": "Middle", "path": "middle", "parent_id": root.json()["id"]},
     )
     leaf = await authenticated_client.post(
         "/api/categories",
-        json={"name": "Leaf", "path": "root/middle/leaf", "parent_id": middle.json()["id"]},
+        json={"name": "Leaf", "path": "leaf", "parent_id": middle.json()["id"]},
     )
+
+    moved = await authenticated_client.patch(
+        f"/api/categories/{middle.json()['id']}",
+        json={"path": "renamed"},
+    )
+    assert moved.status_code == 200
+    assert moved.json()["path"] == "root/renamed"
+    descendants = await authenticated_client.get("/api/categories")
+    leaf_record = next(entry for entry in descendants.json() if entry["id"] == leaf.json()["id"])
+    assert leaf_record["path"] == "root/renamed/leaf"
 
     response = await authenticated_client.patch(
         f"/api/categories/{root.json()['id']}",

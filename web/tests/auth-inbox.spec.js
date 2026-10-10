@@ -50,6 +50,11 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
     },
   });
   expect(registration.status()).toBe(201);
+  const parent = await page.request.post("/api/categories", {
+    data: { name: "Projects", path: `test-${unique}` },
+  });
+  expect(parent.status()).toBe(201);
+  const parentBody = await parent.json();
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
   await page.getByText("Manage categories", { exact: true }).click();
@@ -58,14 +63,17 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
   const originalPath = `test-${unique}/notes`;
   const editedPath = `test-${unique}/guides`;
   await categoryForm.getByLabel("Name", { exact: true }).fill("Notes");
-  await categoryForm.getByLabel("Path", { exact: true }).fill(originalPath);
+  await categoryForm.getByLabel("Path segment", { exact: true }).fill("notes");
+  await expect(categoryForm.locator(`#category-parent option[value="${parentBody.id}"]`)).toHaveCount(1);
+  await categoryForm.locator("#category-parent").selectOption(parentBody.id);
   await categoryForm.getByRole("button", { name: "Create category" }).click();
 
   const originalRow = page.locator(".category-row").filter({ hasText: originalPath });
   await expect(originalRow).toBeVisible();
 
   await categoryForm.getByLabel("Name", { exact: true }).fill("Duplicate");
-  await categoryForm.getByLabel("Path", { exact: true }).fill(originalPath);
+  await categoryForm.getByLabel("Path segment", { exact: true }).fill("notes");
+  await categoryForm.locator("#category-parent").selectOption(parentBody.id);
   await categoryForm.getByRole("button", { name: "Create category" }).click();
   await expect(page.locator("#category-message")).toHaveText("Category path already exists");
   await expect(originalRow).toHaveCount(1);
@@ -73,7 +81,7 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
   await originalRow.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(categoryForm.getByLabel("Name", { exact: true })).toHaveValue("Notes");
   await categoryForm.getByLabel("Name", { exact: true }).fill("Guides");
-  await categoryForm.getByLabel("Path", { exact: true }).fill(editedPath);
+  await categoryForm.getByLabel("Path segment", { exact: true }).fill("guides");
   await categoryForm.getByRole("button", { name: "Save category" }).click();
   const editedRow = page.locator(".category-row").filter({ hasText: editedPath });
   await expect(editedRow).toBeVisible();
@@ -84,7 +92,7 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
   await page.getByText("Manage categories", { exact: true }).click();
   await editedRow.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(categoryForm.getByLabel("Name", { exact: true })).toHaveValue("Guides");
-  await expect(categoryForm.getByLabel("Path", { exact: true })).toHaveValue(editedPath);
+  await expect(categoryForm.getByLabel("Path segment", { exact: true })).toHaveValue("guides");
 
   await editedRow.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.locator("#category-message")).toHaveText("Category deleted.");
@@ -103,7 +111,7 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   expect(registration.status()).toBe(201);
 
   const category = await page.request.post("/api/categories", {
-    data: { name: "Runbooks", path: `test-${unique}/runbooks` },
+    data: { name: "Runbooks", path: `test-${unique}-runbooks` },
   });
   expect(category.status()).toBe(201);
   const categoryBody = await category.json();

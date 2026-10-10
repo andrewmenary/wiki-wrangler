@@ -235,8 +235,8 @@
               <input id="category-name" type="text" required>
             </label>
             <label>
-              Path
-              <input id="category-path" type="text" placeholder="processes/onboarding" required>
+              Path segment
+              <input id="category-path" type="text" placeholder="wiki-wrangler" required>
             </label>
             <label>
               Parent
@@ -473,7 +473,7 @@
         if (!category) return;
         editingCategoryId = category.id;
         categoryName.value = category.name;
-        categoryPath.value = category.path;
+        categoryPath.value = category.slug || category.path.split("/").pop();
         categoryParent.value = category.parent_id || "";
         categoryForm.querySelector("button[type=submit]").textContent = "Save category";
         return;
