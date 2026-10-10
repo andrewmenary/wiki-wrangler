@@ -64,8 +64,8 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
   const originalPath = `test-${unique}/notes`;
   const editedPath = `test-${unique}/guides`;
   await categoryForm.getByLabel("Name", { exact: true }).fill("Notes");
-  await expect(categoryForm.getByLabel("Path segment", { exact: true })).toHaveValue("notes");
-  await categoryForm.getByLabel("Path segment", { exact: true }).fill("notes");
+  await expect(categoryForm.locator("#category-path")).toHaveValue("notes");
+  await categoryForm.locator("#category-path").fill("notes");
   await expect(categoryForm.locator(`#category-parent option[value="${parentBody.id}"]`)).toHaveCount(1);
   await categoryForm.locator("#category-parent").selectOption(parentBody.id);
   await categoryForm.getByRole("button", { name: "Create category" }).click();
@@ -75,7 +75,7 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
   await expect(originalRow).toContainText("Notes");
 
   await categoryForm.getByLabel("Name", { exact: true }).fill("Duplicate");
-  await categoryForm.getByLabel("Path segment", { exact: true }).fill("notes");
+  await categoryForm.locator("#category-path").fill("notes");
   await categoryForm.locator("#category-parent").selectOption(parentBody.id);
   await categoryForm.getByRole("button", { name: "Create category" }).click();
   await expect(page.locator("#category-message")).toHaveText("Category path already exists");
@@ -84,7 +84,7 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
   await originalRow.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(categoryForm.getByLabel("Name", { exact: true })).toHaveValue("Notes");
   await categoryForm.getByLabel("Name", { exact: true }).fill("Guides");
-  await categoryForm.getByLabel("Path segment", { exact: true }).fill("guides");
+  await categoryForm.locator("#category-path").fill("guides");
   await categoryForm.getByRole("button", { name: "Save category" }).click();
   const editedRow = page.locator(".category-row").filter({ hasText: editedPath });
   await expect(editedRow).toBeVisible();
@@ -96,7 +96,7 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
   await page.getByText("Manage categories", { exact: true }).click();
   await editedRow.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(categoryForm.getByLabel("Name", { exact: true })).toHaveValue("Guides");
-  await expect(categoryForm.getByLabel("Path segment", { exact: true })).toHaveValue("guides");
+  await expect(categoryForm.locator("#category-path")).toHaveValue("guides");
 
   await editedRow.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.locator("#category-message")).toHaveText("Category deleted.");
@@ -144,8 +144,8 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   );
   await page.getByLabel("Title", { exact: true }).fill("Service restart runbook v2");
   await page.getByLabel("Summary").fill("Steps for restarting the service.");
-  await page.getByLabel("Tags").fill("operations, runbook, operations");
-  await page.getByLabel("Category").selectOption(categoryBody.id);
+  await page.locator("#review-tags").fill("operations, runbook, operations");
+  await page.locator("#review-category").selectOption(categoryBody.id);
   const markdownSource = page.getByRole("textbox", { name: "Markdown draft" });
   await markdownSource.fill("# Restart the service\n\nFollow the maintenance window.");
   await page.getByRole("button", { name: "Preview" }).click();

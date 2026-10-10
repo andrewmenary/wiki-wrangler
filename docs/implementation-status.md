@@ -68,6 +68,7 @@ configuration, while partial items are intentionally called out in the notes.
 - [x] Review screen
 - [x] Editable Markdown field
 - [x] Vite frontend build with GitHub-flavored Markdown rendering and sanitization
+- [x] Contextual help popovers for tags and category path fields
 - [x] Summary and tags metadata fields
 - [x] Status transition API
 - [x] Domain-level status transition rules

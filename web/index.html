@@ -67,6 +67,11 @@
     .subcopy { margin: 0 0 1.8rem; color: var(--muted); line-height: 1.45; }
     form { display: grid; gap: 1rem; }
     label { display: grid; gap: .4rem; font: 700 .78rem/1.2 Arial, sans-serif; text-transform: uppercase; }
+    .field-heading { display: flex; align-items: center; gap: .35rem; }
+    .field-help { position: relative; font: 700 .72rem Arial, sans-serif; text-transform: none; }
+    .field-help summary { display: grid; place-items: center; width: 1.1rem; height: 1.1rem; border: 1px solid var(--line); border-radius: 50%; color: var(--accent-dark); cursor: pointer; list-style: none; }
+    .field-help summary::-webkit-details-marker { display: none; }
+    .field-help .help-popover { position: absolute; z-index: 2; top: 1.5rem; left: 0; width: 220px; padding: .7rem; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); background: var(--panel); box-shadow: 0 6px 18px rgba(23, 33, 43, .14); font: .76rem/1.4 Arial, sans-serif; text-transform: none; }
     input {
       width: 100%;
       padding: .8rem .85rem;
@@ -234,7 +239,7 @@
               <input id="review-summary" type="text">
             </label>
             <label>
-              Tags
+              <span class="field-heading">Tags <details class="field-help"><summary aria-label="About tags">?</summary><span class="help-popover">Use comma-separated labels for cross-cutting topics. Tags do not determine the publishing folder.</span></details></span>
               <input id="review-tags" type="text" placeholder="process, onboarding, notes">
             </label>
             <label>
@@ -276,7 +281,7 @@
               <input id="category-name" type="text" required>
             </label>
             <label>
-              Path segment
+              <span class="field-heading">Path segment <details class="field-help"><summary aria-label="About category paths">?</summary><span class="help-popover">Use a lowercase hyphenated slug. The parent category supplies the rest of the canonical path.</span></details></span>
               <input id="category-path" type="text" placeholder="wiki-wrangler" required>
             </label>
             <label>
