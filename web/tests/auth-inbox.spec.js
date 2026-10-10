@@ -146,7 +146,7 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   await page.getByLabel("Summary").fill("Steps for restarting the service.");
   await page.locator("#review-tags").fill("operations, runbook, operations");
   await page.locator("#review-category").selectOption(categoryBody.id);
-  const markdownSource = page.getByRole("textbox", { name: "Markdown draft" });
+  const markdownSource = page.getByRole("textbox", { name: "Final Markdown draft" });
   await markdownSource.fill("# Restart the service\n\nFollow the maintenance window.");
   await page.getByRole("button", { name: "Preview" }).click();
   await expect(page.locator("#review-markdown-preview h1")).toHaveText("Restart the service");
