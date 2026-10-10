@@ -67,6 +67,7 @@ configuration, while partial items are intentionally called out in the notes.
 - [x] Review API
 - [x] Review screen
 - [x] Editable Markdown field
+- [x] Vite frontend build with GitHub-flavored Markdown rendering and sanitization
 - [x] Summary and tags metadata fields
 - [x] Status transition API
 - [x] Domain-level status transition rules
@@ -111,5 +112,6 @@ configuration, while partial items are intentionally called out in the notes.
 - [x] Committed Playwright test verifies UI upload and conversion, review metadata,
   title editing, category assignment, and approval
 - [x] Committed Playwright test verifies source filename and generated Markdown preview
+- [x] Committed Playwright test verifies the authenticated wide workspace replaces the login branding
 - [x] Committed Playwright test verifies Inbox capture discard with history preserved
 - [x] Isolate Playwright test data using a disposable Compose stack on port 8081

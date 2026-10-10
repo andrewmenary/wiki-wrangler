@@ -4,7 +4,8 @@ services:
   web:
     image: wiki-wrangler-web:latest
     build:
-      context: ../web
+      context: ..
+      dockerfile: web/Dockerfile
     ports:
       - "8080:80"
     depends_on:

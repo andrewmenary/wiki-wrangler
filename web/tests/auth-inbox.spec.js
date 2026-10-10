@@ -15,6 +15,7 @@ test("a user can register, restore a session, sign out, and sign back in", async
   await page.getByRole("button", { name: "Create account" }).click();
 
   await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
+  await expect(page.locator(".intro")).toBeHidden();
   await expect(greeting).toBeVisible();
   await expect(page.getByLabel("Display name")).toBeHidden();
 
@@ -145,7 +146,12 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   await page.getByLabel("Summary").fill("Steps for restarting the service.");
   await page.getByLabel("Tags").fill("operations, runbook, operations");
   await page.getByLabel("Category").selectOption(categoryBody.id);
-  await page.getByLabel("Markdown draft").fill("# Restart the service\n\nFollow the maintenance window.");
+  const markdownSource = page.getByRole("textbox", { name: "Markdown draft" });
+  await markdownSource.fill("# Restart the service\n\nFollow the maintenance window.");
+  await page.getByRole("button", { name: "Preview" }).click();
+  await expect(page.locator("#review-markdown-preview h1")).toHaveText("Restart the service");
+  await page.getByRole("button", { name: "Source" }).click();
+  await expect(markdownSource).toHaveValue("# Restart the service\n\nFollow the maintenance window.");
   await page.getByRole("button", { name: "Save changes" }).click();
 
   await expect(page.locator("#review-message")).toHaveText("Changes saved.");

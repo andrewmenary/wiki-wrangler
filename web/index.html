@@ -115,6 +115,13 @@
     .review-meta { display: grid; gap: .8rem; margin-bottom: 1rem; }
     .review-source { margin: 0 0 1rem; color: var(--muted); font: .78rem Arial, sans-serif; }
     .generated-preview { margin: 0 0 1rem; padding: .8rem; max-height: 220px; overflow: auto; border: 1px solid var(--line); background: #f7f2eb; white-space: pre-wrap; font: .82rem/1.5 Consolas, monospace; }
+    .markdown-toolbar { display: flex; gap: .35rem; margin-bottom: .5rem; }
+    .markdown-toolbar button { padding: .45rem .7rem; font-size: .75rem; }
+    .markdown-toolbar button[aria-pressed="true"] { color: #fff; background: var(--accent-dark); }
+    .markdown-preview { min-height: 260px; padding: 1rem; border: 1px solid var(--line); background: #fff; line-height: 1.6; }
+    .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { margin: 0 0 .7rem; line-height: 1.15; }
+    .markdown-preview p { margin: 0 0 .85rem; }
+    .markdown-preview code { padding: .1rem .25rem; background: #f0ebe3; font: .85em Consolas, monospace; }
     .category-settings { margin-top: 1.8rem; padding-top: 1.3rem; border-top: 1px solid var(--line); }
     .category-settings summary { cursor: pointer; color: var(--accent-dark); font: 700 .78rem Arial, sans-serif; text-transform: uppercase; }
     .category-form { display: grid; gap: .65rem; margin-top: 1rem; }
@@ -133,6 +140,21 @@
     .secondary-button { color: var(--ink); background: #ebe3d7; }
     .secondary-button:hover { background: #dfd4c5; }
     .empty { color: var(--muted); font: .9rem Arial, sans-serif; }
+    body.workspace-mode { background: var(--paper); }
+    body.workspace-mode main {
+      display: block;
+      max-width: 1440px;
+      padding: 2rem clamp(1rem, 4vw, 4rem);
+    }
+    body.workspace-mode .intro { display: none; }
+    body.workspace-mode .panel {
+      width: 100%;
+      max-width: none;
+      min-height: calc(100vh - 4rem);
+      padding: clamp(1.5rem, 3vw, 3rem);
+      box-shadow: 0 10px 30px rgba(23, 33, 43, .08);
+    }
+    body.workspace-mode .review { max-width: 1040px; }
     @media (max-width: 760px) {
       main { grid-template-columns: 1fr; align-content: center; gap: 2.5rem; }
       .intro p { margin-top: 1.2rem; }
@@ -226,10 +248,19 @@
             Generated Markdown preview
             <pre class="generated-preview" id="review-generated"></pre>
           </label>
-          <label>
-            Markdown draft
-            <textarea id="review-markdown"></textarea>
-          </label>
+          <div class="markdown-toolbar" role="group" aria-label="Markdown draft mode">
+            <button class="secondary-button" id="markdown-source-mode" type="button" aria-pressed="true">Source</button>
+            <button class="secondary-button" id="markdown-preview-mode" type="button" aria-pressed="false">Preview</button>
+          </div>
+          <div id="markdown-source-panel">
+            <label>
+              Markdown draft
+              <textarea id="review-markdown"></textarea>
+            </label>
+          </div>
+          <div id="markdown-preview-panel" hidden>
+            <div class="markdown-preview" id="review-markdown-preview" aria-label="Rendered Markdown preview"></div>
+          </div>
           <p class="message" id="review-message" role="status"></p>
           <div class="review-actions">
             <button class="secondary-button" id="review-save" type="button">Save changes</button>
@@ -262,7 +293,10 @@
       </div>
     </section>
   </main>
-  <script>
+  <script type="module">
+    import DOMPurify from "dompurify";
+    import { marked } from "marked";
+
     const form = document.querySelector("#auth-form");
     const authView = document.querySelector("#auth-view");
     const appView = document.querySelector("#app-view");
@@ -291,6 +325,11 @@
     const reviewTags = document.querySelector("#review-tags");
     const reviewCategory = document.querySelector("#review-category");
     const reviewMarkdown = document.querySelector("#review-markdown");
+    const markdownSourceMode = document.querySelector("#markdown-source-mode");
+    const markdownPreviewMode = document.querySelector("#markdown-preview-mode");
+    const markdownSourcePanel = document.querySelector("#markdown-source-panel");
+    const markdownPreviewPanel = document.querySelector("#markdown-preview-panel");
+    const reviewMarkdownPreview = document.querySelector("#review-markdown-preview");
     const reviewMessage = document.querySelector("#review-message");
     const reviewSave = document.querySelector("#review-save");
     const reviewApprove = document.querySelector("#review-approve");
@@ -306,6 +345,18 @@
     let editingCategoryId = null;
     let categoryPathTouched = false;
     let registering = false;
+
+    function renderMarkdown(markdown) {
+      return DOMPurify.sanitize(marked.parse(markdown, { gfm: true }));
+    }
+
+    function setMarkdownMode(preview) {
+      markdownSourcePanel.hidden = preview;
+      markdownPreviewPanel.hidden = !preview;
+      markdownSourceMode.setAttribute("aria-pressed", String(!preview));
+      markdownPreviewMode.setAttribute("aria-pressed", String(preview));
+      if (preview) reviewMarkdownPreview.innerHTML = renderMarkdown(reviewMarkdown.value);
+    }
 
     function setMode(nextRegistering) {
       registering = nextRegistering;
@@ -369,6 +420,7 @@
       reviewTags.value = (selectedItem.tags || []).join(", ");
       reviewCategory.value = selectedItem.category_id || "";
       reviewMarkdown.value = selectedItem.markdown_final || selectedItem.markdown_generated || "";
+      setMarkdownMode(false);
       reviewSave.hidden = ["approved", "archived"].includes(selectedItem.status);
       reviewApprove.hidden = selectedItem.status !== "review";
       reviewArchive.hidden = !["inbox", "draft", "review", "error"].includes(selectedItem.status);
@@ -443,7 +495,14 @@
       }
     });
 
+    markdownSourceMode.addEventListener("click", () => setMarkdownMode(false));
+    markdownPreviewMode.addEventListener("click", () => setMarkdownMode(true));
+    reviewMarkdown.addEventListener("input", () => {
+      if (!markdownPreviewPanel.hidden) reviewMarkdownPreview.innerHTML = renderMarkdown(reviewMarkdown.value);
+    });
+
     function showApp(user) {
+      document.body.classList.add("workspace-mode");
       authView.hidden = true;
       appView.hidden = false;
       userGreeting.textContent = `Signed in as ${user.display_name}.`;
@@ -526,6 +585,7 @@
       await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
       appView.hidden = true;
       authView.hidden = false;
+      document.body.classList.remove("workspace-mode");
       reviewView.hidden = true;
       selectedItem = null;
       message.textContent = "Signed out.";

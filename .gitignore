@@ -9,6 +9,7 @@ backend/data/
 .env.*
 !.env.example
 node_modules/
+web/dist/
 test-results/
 playwright-report/
 playwright/.cache/
