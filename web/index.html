@@ -113,6 +113,8 @@
     .review { margin-top: 1.8rem; padding-top: 1.3rem; border-top: 1px solid var(--line); }
     .review h3 { margin: 0 0 1rem; font-size: 1.35rem; }
     .review-meta { display: grid; gap: .8rem; margin-bottom: 1rem; }
+    .review-source { margin: 0 0 1rem; color: var(--muted); font: .78rem Arial, sans-serif; }
+    .generated-preview { margin: 0 0 1rem; padding: .8rem; max-height: 220px; overflow: auto; border: 1px solid var(--line); background: #f7f2eb; white-space: pre-wrap; font: .82rem/1.5 Consolas, monospace; }
     .category-settings { margin-top: 1.8rem; padding-top: 1.3rem; border-top: 1px solid var(--line); }
     .category-settings summary { cursor: pointer; color: var(--accent-dark); font: 700 .78rem Arial, sans-serif; text-transform: uppercase; }
     .category-form { display: grid; gap: .65rem; margin-top: 1rem; }
@@ -199,6 +201,7 @@
         </div>
         <div class="review" id="review-view" hidden>
           <h3 id="review-title"></h3>
+          <p class="review-source" id="review-source"></p>
           <div class="review-meta">
             <label>
               Title
@@ -219,6 +222,10 @@
               </select>
             </label>
           </div>
+          <label>
+            Generated Markdown preview
+            <pre class="generated-preview" id="review-generated"></pre>
+          </label>
           <label>
             Markdown draft
             <textarea id="review-markdown"></textarea>
@@ -277,6 +284,8 @@
     const captureMessage = document.querySelector("#capture-message");
     const reviewView = document.querySelector("#review-view");
     const reviewTitle = document.querySelector("#review-title");
+    const reviewSource = document.querySelector("#review-source");
+    const reviewGenerated = document.querySelector("#review-generated");
     const reviewItemTitle = document.querySelector("#review-item-title");
     const reviewSummary = document.querySelector("#review-summary");
     const reviewTags = document.querySelector("#review-tags");
@@ -351,6 +360,10 @@
       if (!response.ok) throw new Error("Could not load the item");
       selectedItem = await response.json();
       reviewTitle.textContent = selectedItem.title;
+      reviewSource.textContent = selectedItem.attachments.length
+        ? `Source: ${selectedItem.attachments.map((attachment) => attachment.filename).join(", ")}`
+        : `Source: ${selectedItem.source_ref || selectedItem.source_type}`;
+      reviewGenerated.textContent = selectedItem.markdown_generated || "No generated Markdown available.";
       reviewItemTitle.value = selectedItem.title;
       reviewSummary.value = selectedItem.summary || "";
       reviewTags.value = (selectedItem.tags || []).join(", ");

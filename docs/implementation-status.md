@@ -110,5 +110,6 @@ configuration, while partial items are intentionally called out in the notes.
       duplicate-path errors, and edit persistence after refresh
 - [x] Committed Playwright test verifies UI upload and conversion, review metadata,
   title editing, category assignment, and approval
+- [x] Committed Playwright test verifies source filename and generated Markdown preview
 - [x] Committed Playwright test verifies Inbox capture discard with history preserved
 - [x] Isolate Playwright test data using a disposable Compose stack on port 8081
