@@ -11,13 +11,16 @@ sequence diagrams, and risk analysis) lives in [docs/](./docs). Start at
 
 ## Implementation Status
 
-The initial backend slice provides:
+Current implementation progress is tracked in
+[docs/implementation-status.md](./docs/implementation-status.md).
 
-- FastAPI application with SQLite initialization
-- `GET /health` database health check
-- `POST /api/items` capture endpoint creating Inbox items
-- Framework-independent item lifecycle rules
-- Pytest coverage for health, capture, and lifecycle behavior
+The working application currently provides:
+
+- Docker Compose web and API services with descriptive image and volume names
+- Local account registration, login, logout, and session cookies
+- A web Inbox with URL capture and recent-item listing
+- HTML extraction into Markdown drafts with raw source preservation
+- SQLite initialization and backend API tests
 
 Run the backend locally:
 
@@ -28,9 +31,25 @@ python -m pytest
 python -m uvicorn app.main:app --reload
 ```
 
-Or run the API with Docker Compose:
+The local API is then available at `http://localhost:8000`.
+
+Run the full web application with Docker Compose from the repository root:
 
 ```powershell
 docker compose -f deploy/docker-compose.yml up --build
 ```
+
+Once the containers are running, open `http://localhost:8080` in a browser. Select
+**Create an account** for the first account, then sign in. The first registered
+account receives the `admin` role.
+
+From the Inbox, enter a public web page URL and select **Add to inbox**. Wiki
+Wrangler fetches the page, extracts readable text, and displays the resulting draft.
+The API health check is available through the web service at
+`http://localhost:8080/health`; the API itself is also exposed at
+`http://localhost:8000/health`.
+
+To stop the application, press `Ctrl+C` in the Compose terminal. The SQLite database
+and captured files remain in the `wiki-wrangler-data` Docker volume. Do not use
+`docker compose down -v` unless you intend to delete that data.
 
