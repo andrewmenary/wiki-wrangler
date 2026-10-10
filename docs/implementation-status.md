@@ -54,7 +54,7 @@ configuration, while partial items are intentionally called out in the notes.
 - [x] Review API
 - [x] Review screen
 - [x] Editable Markdown field
-- [ ] Metadata fields
+- [x] Summary and tags metadata fields
 - [x] Status transition API
 - [x] Domain-level status transition rules
 - [ ] Category CRUD and hierarchy

@@ -1,3 +1,4 @@
+import json
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -42,6 +43,8 @@ class LoginRequest(BaseModel):
 
 class ItemUpdateRequest(BaseModel):
     title: str | None = None
+    summary: str | None = None
+    tags: list[str] | None = None
     markdown_final: str | None = None
     status: str | None = None
 
@@ -236,8 +239,9 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
     @app.get("/api/items")
     def list_items(status: str | None = None) -> list[dict[str, object]]:
         query = """
-            SELECT items.id, items.title, items.status, source_submissions.source_type,
-                   source_submissions.source_ref, items.created_at
+            SELECT items.id, items.title, items.summary, items.tags_json, items.status,
+                source_submissions.source_type, source_submissions.source_ref,
+                items.created_at
             FROM items
             JOIN source_submissions ON source_submissions.id = items.submission_id
         """
@@ -258,9 +262,10 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 text(
                     """
                     SELECT items.id, items.submission_id, items.title, items.status,
-                              items.markdown_generated, items.markdown_final, items.created_at,
-                           source_submissions.source_type, source_submissions.source_ref,
-                           source_submissions.captured_at
+                        items.markdown_generated, items.markdown_final,
+                        items.summary, items.tags_json, items.created_at,
+                        source_submissions.source_type, source_submissions.source_ref,
+                        source_submissions.captured_at
                     FROM items
                     JOIN source_submissions ON source_submissions.id = items.submission_id
                     WHERE items.id = :item_id
@@ -284,12 +289,19 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             ).mappings().all()
 
         result = dict(item)
+        result["tags"] = json.loads(result.pop("tags_json") or "[]")
         result["attachments"] = [dict(attachment) for attachment in attachments]
         return result
 
     @app.patch("/api/items/{item_id}")
     def update_item(item_id: str, request: ItemUpdateRequest) -> dict[str, object]:
-        if request.title is None and request.markdown_final is None and request.status is None:
+        if (
+            request.title is None
+            and request.summary is None
+            and request.tags is None
+            and request.markdown_final is None
+            and request.status is None
+        ):
             raise HTTPException(status_code=422, detail="At least one item field is required")
         if request.title is not None and not request.title.strip():
             raise HTTPException(status_code=422, detail="Title cannot be empty")
@@ -320,13 +332,22 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 text("""
                     UPDATE items
                     SET title = COALESCE(:title, title),
+                        summary = COALESCE(:summary, summary),
+                        tags_json = COALESCE(:tags_json, tags_json),
                         markdown_final = COALESCE(:markdown_final, markdown_final),
                         status = COALESCE(:status, status)
                     WHERE id = :item_id
-                    """),
+                    """
+                ),
                 {
                     "item_id": item_id,
                     "title": request.title.strip() if request.title is not None else None,
+                    "summary": request.summary.strip() if request.summary is not None else None,
+                    "tags_json": json.dumps(
+                        list(dict.fromkeys(tag.strip() for tag in request.tags if tag.strip()))
+                    )
+                    if request.tags is not None
+                    else None,
                     "markdown_final": request.markdown_final,
                     "status": target_status.value if target_status is not None else None,
                 },

@@ -160,7 +160,12 @@ async def test_item_can_be_reviewed_edited_and_approved(client: httpx.AsyncClien
 
     review = await client.patch(
         f"/api/items/{item_id}",
-        json={"markdown_final": "Edited notes", "status": "review"},
+        json={
+            "summary": "A concise summary",
+            "tags": ["meeting", "planning", "meeting"],
+            "markdown_final": "Edited notes",
+            "status": "review",
+        },
     )
     assert review.status_code == 200
     assert review.json()["status"] == "review"
@@ -173,6 +178,8 @@ async def test_item_can_be_reviewed_edited_and_approved(client: httpx.AsyncClien
     detail = await client.get(f"/api/items/{item_id}")
     assert detail.json()["status"] == "approved"
     assert detail.json()["markdown_final"] == "Edited notes"
+    assert detail.json()["summary"] == "A concise summary"
+    assert detail.json()["tags"] == ["meeting", "planning"]
 
 
 async def test_invalid_item_transition_is_rejected(client: httpx.AsyncClient) -> None:

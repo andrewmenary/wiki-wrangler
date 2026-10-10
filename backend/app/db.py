@@ -95,6 +95,12 @@ def initialize_database(engine: Engine) -> None:
         }
         if "markdown_generated" not in item_columns:
             connection.execute(text("ALTER TABLE items ADD COLUMN markdown_generated TEXT"))
+        if "summary" not in item_columns:
+            connection.execute(text("ALTER TABLE items ADD COLUMN summary TEXT"))
+        if "tags_json" not in item_columns:
+            connection.execute(
+                text("ALTER TABLE items ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'")
+            )
         connection.execute(
             text(
                 """

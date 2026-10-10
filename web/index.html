@@ -112,6 +112,7 @@
     .item button:hover { background: transparent; }
     .review { margin-top: 1.8rem; padding-top: 1.3rem; border-top: 1px solid var(--line); }
     .review h3 { margin: 0 0 1rem; font-size: 1.35rem; }
+    .review-meta { display: grid; gap: .8rem; margin-bottom: 1rem; }
     .review textarea { width: 100%; min-height: 180px; resize: vertical; }
     .review-actions { display: flex; gap: .6rem; margin-top: .8rem; }
     .review-actions button { flex: 1; }
@@ -175,6 +176,16 @@
         </div>
         <div class="review" id="review-view" hidden>
           <h3 id="review-title"></h3>
+          <div class="review-meta">
+            <label>
+              Summary
+              <input id="review-summary" type="text">
+            </label>
+            <label>
+              Tags
+              <input id="review-tags" type="text" placeholder="process, onboarding, notes">
+            </label>
+          </div>
           <label>
             Markdown draft
             <textarea id="review-markdown"></textarea>
@@ -207,6 +218,8 @@
     const captureMessage = document.querySelector("#capture-message");
     const reviewView = document.querySelector("#review-view");
     const reviewTitle = document.querySelector("#review-title");
+    const reviewSummary = document.querySelector("#review-summary");
+    const reviewTags = document.querySelector("#review-tags");
     const reviewMarkdown = document.querySelector("#review-markdown");
     const reviewMessage = document.querySelector("#review-message");
     const reviewSave = document.querySelector("#review-save");
@@ -247,6 +260,8 @@
       if (!response.ok) throw new Error("Could not load the item");
       selectedItem = await response.json();
       reviewTitle.textContent = selectedItem.title;
+      reviewSummary.value = selectedItem.summary || "";
+      reviewTags.value = (selectedItem.tags || []).join(", ");
       reviewMarkdown.value = selectedItem.markdown_final || selectedItem.markdown_generated || "";
       reviewSave.hidden = selectedItem.status === "approved";
       reviewApprove.hidden = selectedItem.status !== "review";
@@ -277,7 +292,11 @@
       if (!selectedItem) return;
       reviewMessage.textContent = "Saving...";
       try {
-        const fields = { markdown_final: reviewMarkdown.value };
+        const fields = {
+          summary: reviewSummary.value,
+          tags: reviewTags.value.split(",").map((tag) => tag.trim()).filter(Boolean),
+          markdown_final: reviewMarkdown.value
+        };
         if (selectedItem.status === "draft") fields.status = "review";
         await updateSelectedItem(fields);
         reviewMessage.textContent = "Changes saved.";
@@ -290,7 +309,12 @@
       if (!selectedItem) return;
       reviewMessage.textContent = "Approving...";
       try {
-        await updateSelectedItem({ markdown_final: reviewMarkdown.value, status: "approved" });
+        await updateSelectedItem({
+          summary: reviewSummary.value,
+          tags: reviewTags.value.split(",").map((tag) => tag.trim()).filter(Boolean),
+          markdown_final: reviewMarkdown.value,
+          status: "approved"
+        });
         reviewMessage.textContent = "Approved for publishing.";
       } catch (error) {
         reviewMessage.textContent = error.message;
