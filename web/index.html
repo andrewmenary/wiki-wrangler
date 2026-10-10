@@ -354,7 +354,7 @@
       reviewMarkdown.value = selectedItem.markdown_final || selectedItem.markdown_generated || "";
       reviewSave.hidden = selectedItem.status === "approved";
       reviewApprove.hidden = selectedItem.status !== "review";
-      reviewArchive.hidden = !["draft", "review"].includes(selectedItem.status);
+      reviewArchive.hidden = !["inbox", "draft", "review", "error"].includes(selectedItem.status);
       reviewMessage.textContent = `Status: ${selectedItem.status}`;
       reviewView.hidden = false;
     }

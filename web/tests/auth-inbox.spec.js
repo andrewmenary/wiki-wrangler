@@ -150,3 +150,31 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   expect(detailBody.category_id).toBe(categoryBody.id);
   expect(detailBody.markdown_final).toBe("# Restart the service\n\nFollow the maintenance window.");
 });
+
+test("an Inbox capture can be discarded without deleting its history", async ({ page }) => {
+  const unique = Date.now();
+  const registration = await page.request.post("/api/auth/register", {
+    data: {
+      display_name: "Archive Test User",
+      email: `archive-${unique}@example.com`,
+      password: "password123",
+    },
+  });
+  expect(registration.status()).toBe(201);
+
+  const capture = await page.request.post("/api/items", {
+    data: { title: "Discard from Inbox", source_type: "manual" },
+  });
+  expect(capture.status()).toBe(201);
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  const item = page.locator(".item").filter({ hasText: "Discard from Inbox" });
+  await item.getByRole("button").click();
+  await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
+  await page.getByRole("button", { name: "Archive" }).click();
+  await expect(page.locator("#review-message")).toHaveText(
+    "Archived. The capture remains available in Inbox history.",
+  );
+  await expect(item).toContainText("archived");
+});
