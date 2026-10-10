@@ -175,6 +175,47 @@ async def test_admin_can_manage_repository_configuration(
     assert deleted.status_code == 204
 
 
+async def test_approved_item_resolves_repository_publication_paths(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    repository = await authenticated_client.post(
+        "/api/repositories",
+        json={
+            "name": "Work Wiki",
+            "remote_url": "https://github.com/example/work-wiki.git",
+            "credential_ref": "github-work",
+            "raw_root": "sources",
+            "curated_root": "knowledge",
+            "is_default": True,
+        },
+    )
+    category = await authenticated_client.post(
+        "/api/categories",
+        json={"name": "Runbooks", "path": "runbooks"},
+    )
+    upload = await authenticated_client.post(
+        "/api/items/upload",
+        files={"file": ("notes.txt", b"Restart steps", "text/plain")},
+        data={"title": "Service Guide"},
+    )
+    item_id = upload.json()["id"]
+    await authenticated_client.post(f"/api/items/{item_id}/convert")
+    await authenticated_client.patch(
+        f"/api/items/{item_id}",
+        json={"category_id": category.json()["id"], "status": "review"},
+    )
+    await authenticated_client.patch(
+        f"/api/items/{item_id}", json={"status": "approved"}
+    )
+
+    preview = await authenticated_client.get(f"/api/items/{item_id}/publication-preview")
+
+    assert repository.status_code == 201
+    assert preview.status_code == 200
+    assert preview.json()["raw_path"] == f"sources/file/{item_id}/notes.txt"
+    assert preview.json()["curated_path"] == "knowledge/runbooks/service-guide.md"
+
+
 async def test_capture_creates_inbox_item(authenticated_client: httpx.AsyncClient) -> None:
     response = await authenticated_client.post(
         "/api/items",

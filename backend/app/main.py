@@ -114,6 +114,18 @@ def normalize_repository_root(value: str) -> str:
     return root
 
 
+def slugify_publication_name(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "untitled"
+
+
+def validate_relative_publication_path(value: str) -> str:
+    segments = value.split("/")
+    if not segments or any(not CATEGORY_SLUG_PATTERN.fullmatch(segment) for segment in segments):
+        raise HTTPException(status_code=422, detail="Category path cannot be published safely")
+    return "/".join(segments)
+
+
 def validate_repository_values(
     request: RepositoryRequest | RepositoryUpdateRequest,
 ) -> dict[str, object]:
@@ -678,6 +690,60 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         result["tags"] = json.loads(result.pop("tags_json") or "[]")
         result["attachments"] = [dict(attachment) for attachment in attachments]
         return result
+
+    @app.get("/api/items/{item_id}/publication-preview", dependencies=[Depends(require_session)])
+    def publication_preview(
+        item_id: str, repository_id: str | None = None
+    ) -> dict[str, object]:
+        with engine.connect() as connection:
+            item = connection.execute(
+                text(
+                    """
+                    SELECT items.status, items.title, categories.path AS category_path,
+                        source_submissions.source_type, attachments.filename
+                    FROM items
+                    JOIN source_submissions ON source_submissions.id = items.submission_id
+                    LEFT JOIN categories ON categories.id = items.category_id
+                    LEFT JOIN attachments ON attachments.item_id = items.id
+                    WHERE items.id = :item_id
+                    ORDER BY attachments.created_at
+                    LIMIT 1
+                    """
+                ),
+                {"item_id": item_id},
+            ).mappings().first()
+            if item is None:
+                raise HTTPException(status_code=404, detail="Item not found")
+            if item["status"] != ItemStatus.APPROVED.value:
+                raise HTTPException(status_code=409, detail="Only approved items can be published")
+            if item["category_path"] is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Item must have a category before publishing",
+                )
+            repository_query = (
+                "SELECT id, name, raw_root, curated_root FROM repositories "
+                "WHERE id = :repository_id"
+                if repository_id
+                else "SELECT id, name, raw_root, curated_root FROM repositories "
+                "WHERE is_default = 1 ORDER BY created_at LIMIT 1"
+            )
+            repository = connection.execute(
+                text(repository_query), {"repository_id": repository_id} if repository_id else {}
+            ).mappings().first()
+        if repository is None:
+            raise HTTPException(status_code=422, detail="No target repository is configured")
+
+        category_path = validate_relative_publication_path(item["category_path"])
+        source_type = slugify_publication_name(item["source_type"])
+        filename = Path(item["filename"] or f"{source_type}.source").name
+        title_slug = slugify_publication_name(item["title"])
+        return {
+            "repository_id": repository["id"],
+            "repository_name": repository["name"],
+            "raw_path": f"{repository['raw_root']}/{source_type}/{item_id}/{filename}",
+            "curated_path": f"{repository['curated_root']}/{category_path}/{title_slug}.md",
+        }
 
     @app.get("/api/items/{item_id}/source", dependencies=[Depends(require_session)])
     def get_item_source(item_id: str) -> dict[str, object]:

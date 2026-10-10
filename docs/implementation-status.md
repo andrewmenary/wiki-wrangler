@@ -82,6 +82,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Repository Settings UI
 - [ ] Publish worker
 - [ ] Raw and curated Git paths
+  - [x] Approved-item publication path preview API
 - [ ] Publication records and commit links
 - [ ] Audit log
 
