@@ -112,6 +112,69 @@ async def test_registered_user_can_log_in_but_invalid_password_is_rejected(
     assert login.json()["role"] == "admin"
 
 
+async def test_repository_configuration_requires_admin(client: httpx.AsyncClient) -> None:
+    await client.post(
+        "/api/auth/register",
+        json={"display_name": "Admin", "email": "admin@example.com", "password": "password123"},
+    )
+    await client.post(
+        "/api/auth/register",
+        json={"display_name": "Curator", "email": "curator@example.com", "password": "password123"},
+    )
+
+    response = await client.get("/api/repositories")
+
+    assert response.status_code == 403
+
+
+async def test_admin_can_manage_repository_configuration(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    created = await authenticated_client.post(
+        "/api/repositories",
+        json={
+            "name": "Work Wiki",
+            "remote_url": "https://github.com/example/work-wiki.git",
+            "credential_ref": "github-work",
+            "raw_root": "sources",
+            "curated_root": "knowledge",
+            "is_default": True,
+        },
+    )
+    assert created.status_code == 201
+    repository = created.json()
+    assert repository["curated_root"] == "knowledge"
+    assert repository["raw_root"] == "sources"
+
+    invalid = await authenticated_client.patch(
+        f"/api/repositories/{repository['id']}",
+        json={"curated_root": "../outside"},
+    )
+    assert invalid.status_code == 422
+
+    updated = await authenticated_client.patch(
+        f"/api/repositories/{repository['id']}",
+        json={"curated_root": "published"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["curated_root"] == "published"
+
+    default_delete = await authenticated_client.delete(f"/api/repositories/{repository['id']}")
+    assert default_delete.status_code == 409
+
+    secondary = await authenticated_client.post(
+        "/api/repositories",
+        json={
+            "name": "Personal Wiki",
+            "remote_url": "git@github.com:example/personal-wiki.git",
+            "credential_ref": "github-personal",
+        },
+    )
+    assert secondary.status_code == 201
+    deleted = await authenticated_client.delete(f"/api/repositories/{secondary.json()['id']}")
+    assert deleted.status_code == 204
+
+
 async def test_capture_creates_inbox_item(authenticated_client: httpx.AsyncClient) -> None:
     response = await authenticated_client.post(
         "/api/items",

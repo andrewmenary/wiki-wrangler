@@ -63,6 +63,28 @@ class CategoryUpdateRequest(BaseModel):
     parent_id: str | None = None
 
 
+class RepositoryRequest(BaseModel):
+    name: str
+    remote_url: str
+    default_branch: str = "main"
+    publish_mode: str = "direct"
+    credential_ref: str
+    raw_root: str = "raw"
+    curated_root: str = "curated"
+    is_default: bool = False
+
+
+class RepositoryUpdateRequest(BaseModel):
+    name: str | None = None
+    remote_url: str | None = None
+    default_branch: str | None = None
+    publish_mode: str | None = None
+    credential_ref: str | None = None
+    raw_root: str | None = None
+    curated_root: str | None = None
+    is_default: bool | None = None
+
+
 ALLOWED_UPLOAD_EXTENSIONS = {".csv", ".docx", ".md", ".pdf", ".pptx", ".txt", ".xlsx"}
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 MAX_URL_SIZE = 10 * 1024 * 1024
@@ -80,6 +102,45 @@ def normalize_category_slug(value: str) -> str:
             detail="Category path must be a lowercase hyphenated slug",
         )
     return slug
+
+
+def normalize_repository_root(value: str) -> str:
+    root = value.strip().strip("/")
+    if not CATEGORY_SLUG_PATTERN.fullmatch(root):
+        raise HTTPException(
+            status_code=422,
+            detail="Repository roots must be lowercase hyphenated folder names",
+        )
+    return root
+
+
+def validate_repository_values(
+    request: RepositoryRequest | RepositoryUpdateRequest,
+) -> dict[str, object]:
+    values = request.model_dump(exclude_unset=not isinstance(request, RepositoryRequest))
+    if "name" in values:
+        values["name"] = str(values["name"]).strip()
+        if not values["name"]:
+            raise HTTPException(status_code=422, detail="Repository name is required")
+    if "remote_url" in values:
+        remote_url = str(values["remote_url"]).strip()
+        if not remote_url.startswith(("https://", "http://", "ssh://", "git@")):
+            raise HTTPException(status_code=422, detail="Unsupported repository URL")
+        values["remote_url"] = remote_url
+    if "default_branch" in values:
+        values["default_branch"] = str(values["default_branch"]).strip()
+        if not values["default_branch"]:
+            raise HTTPException(status_code=422, detail="Default branch is required")
+    if "publish_mode" in values and values["publish_mode"] not in {"direct", "pull_request"}:
+        raise HTTPException(status_code=422, detail="Unknown publish mode")
+    if "credential_ref" in values:
+        values["credential_ref"] = str(values["credential_ref"]).strip()
+        if not values["credential_ref"]:
+            raise HTTPException(status_code=422, detail="Credential reference is required")
+    for root_name in ("raw_root", "curated_root"):
+        if root_name in values:
+            values[root_name] = normalize_repository_root(str(values[root_name]))
+    return values
 
 
 def create_app(database_url: str | None = None, storage_path: Path | None = None) -> FastAPI:
@@ -222,6 +283,13 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
     ) -> None:
         current_user(session)
+
+    def require_admin(
+        session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+    ) -> None:
+        user = current_user(session)
+        if user["role"] != "admin":
+            raise HTTPException(status_code=403, detail="Administrator access required")
 
     @app.post("/api/auth/logout", status_code=204)
     def logout(
@@ -424,6 +492,92 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             connection.execute(
                 text("DELETE FROM categories WHERE id = :category_id"),
                 {"category_id": category_id},
+            )
+
+    @app.get("/api/repositories", dependencies=[Depends(require_admin)])
+    def list_repositories() -> list[dict[str, object]]:
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT id, name, remote_url, default_branch, publish_mode,
+                        credential_ref, raw_root, curated_root, is_default, created_at
+                    FROM repositories
+                    ORDER BY name
+                    """
+                )
+            ).mappings().all()
+        return [dict(row) for row in rows]
+
+    @app.post("/api/repositories", status_code=201, dependencies=[Depends(require_admin)])
+    def create_repository(request: RepositoryRequest) -> dict[str, object]:
+        values = validate_repository_values(request)
+        repository_id = str(uuid4())
+        with engine.begin() as connection:
+            if values.get("is_default"):
+                connection.execute(text("UPDATE repositories SET is_default = 0"))
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO repositories
+                        (id, name, remote_url, default_branch, publish_mode,
+                         credential_ref, raw_root, curated_root, is_default)
+                    VALUES
+                        (:id, :name, :remote_url, :default_branch, :publish_mode,
+                         :credential_ref, :raw_root, :curated_root, :is_default)
+                    """
+                ),
+                {"id": repository_id, **values},
+            )
+            row = connection.execute(
+                text("SELECT * FROM repositories WHERE id = :id"), {"id": repository_id}
+            ).mappings().one()
+        return dict(row)
+
+    @app.patch("/api/repositories/{repository_id}", dependencies=[Depends(require_admin)])
+    def update_repository(
+        repository_id: str, request: RepositoryUpdateRequest
+    ) -> dict[str, object]:
+        if not request.model_fields_set:
+            raise HTTPException(status_code=422, detail="At least one repository field is required")
+        values = validate_repository_values(request)
+        with engine.begin() as connection:
+            existing = connection.execute(
+                text("SELECT id FROM repositories WHERE id = :id"), {"id": repository_id}
+            ).first()
+            if existing is None:
+                raise HTTPException(status_code=404, detail="Repository not found")
+            if values.get("is_default"):
+                connection.execute(text("UPDATE repositories SET is_default = 0"))
+            assignments = ", ".join(f"{field} = :{field}" for field in values)
+            connection.execute(
+                text(f"UPDATE repositories SET {assignments} WHERE id = :id"),
+                {"id": repository_id, **values},
+            )
+            row = connection.execute(
+                text("SELECT * FROM repositories WHERE id = :id"), {"id": repository_id}
+            ).mappings().one()
+        return dict(row)
+
+    @app.delete(
+        "/api/repositories/{repository_id}",
+        status_code=204,
+        dependencies=[Depends(require_admin)],
+    )
+    def delete_repository(repository_id: str) -> None:
+        with engine.begin() as connection:
+            repository = connection.execute(
+                text("SELECT is_default FROM repositories WHERE id = :id"),
+                {"id": repository_id},
+            ).first()
+            if repository is None:
+                raise HTTPException(status_code=404, detail="Repository not found")
+            if repository[0]:
+                raise HTTPException(
+                    status_code=409, detail="The default repository cannot be deleted"
+                )
+            connection.execute(
+                text("DELETE FROM repositories WHERE id = :id"), {"id": repository_id}
             )
 
     @app.post("/api/items", status_code=201, dependencies=[Depends(require_session)])

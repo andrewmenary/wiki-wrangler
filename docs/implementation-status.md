@@ -78,6 +78,8 @@ configuration, while partial items are intentionally called out in the notes.
 ## Phase 3 - Git Publishing
 
 - [ ] Repository configuration
+  - [x] Admin API for repository targets, roots, and default selection
+  - [ ] Repository Settings UI
 - [ ] Publish worker
 - [ ] Raw and curated Git paths
 - [ ] Publication records and commit links

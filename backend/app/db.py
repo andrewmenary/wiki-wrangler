@@ -76,6 +76,25 @@ def initialize_database(engine: Engine) -> None:
         connection.execute(
             text(
                 """
+                CREATE TABLE IF NOT EXISTS repositories (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    remote_url TEXT NOT NULL,
+                    default_branch TEXT NOT NULL DEFAULT 'main',
+                    publish_mode TEXT NOT NULL DEFAULT 'direct'
+                        CHECK (publish_mode IN ('direct', 'pull_request')),
+                    credential_ref TEXT NOT NULL,
+                    raw_root TEXT NOT NULL DEFAULT 'raw',
+                    curated_root TEXT NOT NULL DEFAULT 'curated',
+                    is_default INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
                 CREATE TABLE IF NOT EXISTS items (
                     id TEXT PRIMARY KEY,
                     submission_id TEXT NOT NULL REFERENCES source_submissions(id),
