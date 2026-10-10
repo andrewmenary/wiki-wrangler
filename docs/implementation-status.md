@@ -25,6 +25,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Login endpoint
   - [x] Session cookie
   - [x] Login screen
+  - [x] Session protection for item and category APIs
 - [ ] CI pipeline
   - [x] Lint workflow configured and passing on GitHub
   - [x] Unit-test workflow configured and passing on GitHub

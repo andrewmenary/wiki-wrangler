@@ -20,11 +20,31 @@ async def client(tmp_path) -> AsyncIterator[httpx.AsyncClient]:
         yield test_client
 
 
+@pytest.fixture
+async def authenticated_client(client: httpx.AsyncClient) -> httpx.AsyncClient:
+    response = await client.post(
+        "/api/auth/register",
+        json={
+            "display_name": "API Test User",
+            "email": "api-test@example.com",
+            "password": "password123",
+        },
+    )
+    assert response.status_code == 201
+    return client
+
+
 async def test_health_reports_database_status(client: httpx.AsyncClient) -> None:
     response = await client.get("/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "database": "ok"}
+
+
+async def test_item_routes_require_authentication(client: httpx.AsyncClient) -> None:
+    response = await client.get("/api/items")
+
+    assert response.status_code == 401
 
 
 async def test_first_user_can_register_and_use_session_cookie(client: httpx.AsyncClient) -> None:
@@ -92,8 +112,8 @@ async def test_registered_user_can_log_in_but_invalid_password_is_rejected(
     assert login.json()["role"] == "admin"
 
 
-async def test_capture_creates_inbox_item(client: httpx.AsyncClient) -> None:
-    response = await client.post(
+async def test_capture_creates_inbox_item(authenticated_client: httpx.AsyncClient) -> None:
+    response = await authenticated_client.post(
         "/api/items",
         json={"title": "Requirements", "source_type": "file", "source_ref": "requirements.txt"},
     )
@@ -104,33 +124,35 @@ async def test_capture_creates_inbox_item(client: httpx.AsyncClient) -> None:
     assert response.json()["submission_id"]
 
     item_id = response.json()["id"]
-    detail = await client.get(f"/api/items/{item_id}")
+    detail = await authenticated_client.get(f"/api/items/{item_id}")
     assert detail.status_code == 200
     assert detail.json()["title"] == "Requirements"
     assert detail.json()["source_type"] == "file"
 
 
-async def test_items_can_be_filtered_by_status(client: httpx.AsyncClient) -> None:
-    await client.post(
+async def test_items_can_be_filtered_by_status(authenticated_client: httpx.AsyncClient) -> None:
+    await authenticated_client.post(
         "/api/items",
         json={"title": "Inbox item", "source_type": "manual"},
     )
 
-    response = await client.get("/api/items?status=inbox")
+    response = await authenticated_client.get("/api/items?status=inbox")
 
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["title"] == "Inbox item"
 
 
-async def test_missing_item_returns_not_found(client: httpx.AsyncClient) -> None:
-    response = await client.get("/api/items/missing")
+async def test_missing_item_returns_not_found(authenticated_client: httpx.AsyncClient) -> None:
+    response = await authenticated_client.get("/api/items/missing")
 
     assert response.status_code == 404
 
 
-async def test_upload_stores_raw_file_as_inbox_item(client: httpx.AsyncClient, tmp_path) -> None:
-    response = await client.post(
+async def test_upload_stores_raw_file_as_inbox_item(
+    authenticated_client: httpx.AsyncClient, tmp_path
+) -> None:
+    response = await authenticated_client.post(
         "/api/items/upload",
         files={"file": ("notes.txt", b"Meeting notes", "text/plain")},
         data={"title": "Meeting notes"},
@@ -145,8 +167,10 @@ async def test_upload_stores_raw_file_as_inbox_item(client: httpx.AsyncClient, t
     assert stored_files[0].read_bytes() == b"Meeting notes"
 
 
-async def test_upload_rejects_unsupported_file_type(client: httpx.AsyncClient) -> None:
-    response = await client.post(
+async def test_upload_rejects_unsupported_file_type(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    response = await authenticated_client.post(
         "/api/items/upload",
         files={"file": ("script.exe", b"not allowed", "application/octet-stream")},
     )
@@ -154,32 +178,36 @@ async def test_upload_rejects_unsupported_file_type(client: httpx.AsyncClient) -
     assert response.status_code == 415
 
 
-async def test_text_upload_can_be_converted_to_draft(client: httpx.AsyncClient) -> None:
-    upload = await client.post(
+async def test_text_upload_can_be_converted_to_draft(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    upload = await authenticated_client.post(
         "/api/items/upload",
         files={"file": ("notes.txt", b"# Meeting notes", "text/plain")},
     )
     item_id = upload.json()["id"]
 
-    response = await client.post(f"/api/items/{item_id}/convert")
+    response = await authenticated_client.post(f"/api/items/{item_id}/convert")
 
     assert response.status_code == 200
     assert response.json()["status"] == "draft"
-    detail = await client.get(f"/api/items/{item_id}")
+    detail = await authenticated_client.get(f"/api/items/{item_id}")
     assert detail.json()["status"] == "draft"
     assert detail.json()["markdown_generated"] == "# Meeting notes"
     assert detail.json()["markdown_final"] == "# Meeting notes"
 
 
-async def test_item_can_be_reviewed_edited_and_approved(client: httpx.AsyncClient) -> None:
-    upload = await client.post(
+async def test_item_can_be_reviewed_edited_and_approved(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    upload = await authenticated_client.post(
         "/api/items/upload",
         files={"file": ("notes.txt", b"Original notes", "text/plain")},
     )
     item_id = upload.json()["id"]
-    await client.post(f"/api/items/{item_id}/convert")
+    await authenticated_client.post(f"/api/items/{item_id}/convert")
 
-    review = await client.patch(
+    review = await authenticated_client.patch(
         f"/api/items/{item_id}",
         json={
             "summary": "A concise summary",
@@ -191,25 +219,27 @@ async def test_item_can_be_reviewed_edited_and_approved(client: httpx.AsyncClien
     assert review.status_code == 200
     assert review.json()["status"] == "review"
 
-    approved = await client.patch(
+    approved = await authenticated_client.patch(
         f"/api/items/{item_id}",
         json={"status": "approved"},
     )
     assert approved.status_code == 200
-    detail = await client.get(f"/api/items/{item_id}")
+    detail = await authenticated_client.get(f"/api/items/{item_id}")
     assert detail.json()["status"] == "approved"
     assert detail.json()["markdown_final"] == "Edited notes"
     assert detail.json()["summary"] == "A concise summary"
     assert detail.json()["tags"] == ["meeting", "planning"]
 
 
-async def test_categories_support_hierarchy_and_item_assignment(client: httpx.AsyncClient) -> None:
-    parent = await client.post(
+async def test_categories_support_hierarchy_and_item_assignment(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    parent = await authenticated_client.post(
         "/api/categories",
         json={"name": "Processes", "path": "processes"},
     )
     assert parent.status_code == 201
-    child = await client.post(
+    child = await authenticated_client.post(
         "/api/categories",
         json={
             "name": "Onboarding",
@@ -219,76 +249,82 @@ async def test_categories_support_hierarchy_and_item_assignment(client: httpx.As
     )
     assert child.status_code == 201
 
-    capture = await client.post(
+    capture = await authenticated_client.post(
         "/api/items",
         json={"title": "Guide", "source_type": "manual", "markdown": "Text"},
     )
     item_id = capture.json()["id"]
-    assignment = await client.patch(
+    assignment = await authenticated_client.patch(
         f"/api/items/{item_id}",
         json={"category_id": child.json()["id"]},
     )
     assert assignment.status_code == 200
-    detail = await client.get(f"/api/items/{item_id}")
+    detail = await authenticated_client.get(f"/api/items/{item_id}")
     assert detail.json()["category_path"] == "processes/onboarding"
 
-    cleared_assignment = await client.patch(
+    cleared_assignment = await authenticated_client.patch(
         f"/api/items/{item_id}",
         json={"category_id": None},
     )
     assert cleared_assignment.status_code == 200
-    detail = await client.get(f"/api/items/{item_id}")
+    detail = await authenticated_client.get(f"/api/items/{item_id}")
     assert detail.json()["category_id"] is None
     assert detail.json()["category_path"] is None
 
-    cleared_parent = await client.patch(
+    cleared_parent = await authenticated_client.patch(
         f"/api/categories/{child.json()['id']}",
         json={"parent_id": None},
     )
     assert cleared_parent.status_code == 200
     assert cleared_parent.json()["parent_id"] is None
 
-    reassigned = await client.patch(
+    reassigned = await authenticated_client.patch(
         f"/api/items/{item_id}",
         json={"category_id": child.json()["id"]},
     )
     assert reassigned.status_code == 200
 
-    duplicate = await client.post(
+    duplicate = await authenticated_client.post(
         "/api/categories",
         json={"name": "Other", "path": "processes/onboarding"},
     )
     assert duplicate.status_code == 409
 
-    edited = await client.patch(
+    edited = await authenticated_client.patch(
         f"/api/categories/{child.json()['id']}",
         json={"name": "New Hire Onboarding", "path": "processes/new-hire-onboarding"},
     )
     assert edited.status_code == 200
     assert edited.json()["path"] == "processes/new-hire-onboarding"
 
-    assigned_delete = await client.delete(f"/api/categories/{edited.json()['id']}")
+    assigned_delete = await authenticated_client.delete(f"/api/categories/{edited.json()['id']}")
     assert assigned_delete.status_code == 409
 
-    removable = await client.post(
+    removable = await authenticated_client.post(
         "/api/categories",
         json={"name": "Temporary", "path": "temporary"},
     )
-    assert (await client.delete(f"/api/categories/{removable.json()['id']}")).status_code == 204
+    assert (
+        await authenticated_client.delete(f"/api/categories/{removable.json()['id']}")
+    ).status_code == 204
 
 
-async def test_category_updates_reject_ancestry_cycles(client: httpx.AsyncClient) -> None:
-    root = await client.post("/api/categories", json={"name": "Root", "path": "root"})
-    middle = await client.post(
+async def test_category_updates_reject_ancestry_cycles(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    root = await authenticated_client.post(
+        "/api/categories", json={"name": "Root", "path": "root"}
+    )
+    middle = await authenticated_client.post(
         "/api/categories",
         json={"name": "Middle", "path": "root/middle", "parent_id": root.json()["id"]},
     )
-    leaf = await client.post(
+    leaf = await authenticated_client.post(
         "/api/categories",
         json={"name": "Leaf", "path": "root/middle/leaf", "parent_id": middle.json()["id"]},
     )
 
-    response = await client.patch(
+    response = await authenticated_client.patch(
         f"/api/categories/{root.json()['id']}",
         json={"parent_id": leaf.json()["id"]},
     )
@@ -297,22 +333,24 @@ async def test_category_updates_reject_ancestry_cycles(client: httpx.AsyncClient
     assert response.json()["detail"] == "Category hierarchy cannot contain a cycle"
 
 
-async def test_draft_can_be_archived_without_hard_deleting_it(client: httpx.AsyncClient) -> None:
-    capture = await client.post(
+async def test_draft_can_be_archived_without_hard_deleting_it(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    capture = await authenticated_client.post(
         "/api/items",
         json={"title": "Discard me", "source_type": "manual", "markdown": "Text"},
     )
 
-    response = await client.patch(
+    response = await authenticated_client.patch(
         f"/api/items/{capture.json()['id']}",
         json={"status": "archived"},
     )
 
     assert response.status_code == 200
-    detail = await client.get(f"/api/items/{capture.json()['id']}")
+    detail = await authenticated_client.get(f"/api/items/{capture.json()['id']}")
     assert detail.json()["status"] == "archived"
 
-    edit = await client.patch(
+    edit = await authenticated_client.patch(
         f"/api/items/{capture.json()['id']}",
         json={"summary": "Should remain unchanged"},
     )
@@ -320,13 +358,15 @@ async def test_draft_can_be_archived_without_hard_deleting_it(client: httpx.Asyn
     assert edit.json()["detail"] == "Archived items cannot be changed"
 
 
-async def test_invalid_item_transition_is_rejected(client: httpx.AsyncClient) -> None:
-    capture = await client.post(
+async def test_invalid_item_transition_is_rejected(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    capture = await authenticated_client.post(
         "/api/items",
         json={"title": "Draft", "source_type": "manual", "markdown": "Text"},
     )
 
-    response = await client.patch(
+    response = await authenticated_client.patch(
         f"/api/items/{capture.json()['id']}",
         json={"status": "approved"},
     )
@@ -334,22 +374,24 @@ async def test_invalid_item_transition_is_rejected(client: httpx.AsyncClient) ->
     assert response.status_code == 409
 
 
-async def test_unsupported_conversion_marks_item_as_error(client: httpx.AsyncClient) -> None:
-    upload = await client.post(
+async def test_unsupported_conversion_marks_item_as_error(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    upload = await authenticated_client.post(
         "/api/items/upload",
         files={"file": ("notes.csv", b"name,value\nitem,1", "text/csv")},
     )
     item_id = upload.json()["id"]
 
-    response = await client.post(f"/api/items/{item_id}/convert")
+    response = await authenticated_client.post(f"/api/items/{item_id}/convert")
 
     assert response.status_code == 422
-    detail = await client.get(f"/api/items/{item_id}")
+    detail = await authenticated_client.get(f"/api/items/{item_id}")
     assert detail.json()["status"] == "error"
 
 
 async def test_url_capture_extracts_text_and_preserves_source(
-    client: httpx.AsyncClient, monkeypatch
+    authenticated_client: httpx.AsyncClient, monkeypatch
 ) -> None:
     class FakeResponse:
         def __enter__(self):
@@ -368,13 +410,13 @@ async def test_url_capture_extracts_text_and_preserves_source(
 
     monkeypatch.setattr(main, "urlopen", lambda request, timeout: FakeResponse())
 
-    response = await client.post(
+    response = await authenticated_client.post(
         "/api/items/url",
         params={"url": "https://example.com/page"},
     )
 
     assert response.status_code == 201
-    item = (await client.get(f"/api/items/{response.json()['id']}")).json()
+    item = (await authenticated_client.get(f"/api/items/{response.json()['id']}")).json()
     assert item["status"] == "draft"
     assert item["title"] == "Useful page"
     assert item["markdown_final"] == (

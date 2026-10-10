@@ -7,7 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from fastapi import Cookie, FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import text
 
@@ -205,6 +205,11 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             raise HTTPException(status_code=401, detail="Authentication required")
         return dict(user)
 
+    def require_session(
+        session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+    ) -> None:
+        current_user(session)
+
     @app.post("/api/auth/logout", status_code=204)
     def logout(
         response: Response,
@@ -218,7 +223,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 )
         response.delete_cookie(SESSION_COOKIE)
 
-    @app.get("/api/categories")
+    @app.get("/api/categories", dependencies=[Depends(require_session)])
     def list_categories() -> list[dict[str, object]]:
         with engine.connect() as connection:
             rows = connection.execute(
@@ -230,7 +235,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             ).mappings().all()
         return [dict(row) for row in rows]
 
-    @app.post("/api/categories", status_code=201)
+    @app.post("/api/categories", status_code=201, dependencies=[Depends(require_session)])
     def create_category(request: CategoryRequest) -> dict[str, object]:
         name = request.name.strip()
         path = request.path.strip().strip("/")
@@ -267,7 +272,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 raise
         return {"id": category_id, "name": name, "path": path, "parent_id": request.parent_id}
 
-    @app.patch("/api/categories/{category_id}")
+    @app.patch("/api/categories/{category_id}", dependencies=[Depends(require_session)])
     def update_category(
         category_id: str, request: CategoryUpdateRequest
     ) -> dict[str, object]:
@@ -340,7 +345,11 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             "parent_id": parent_id,
         }
 
-    @app.delete("/api/categories/{category_id}", status_code=204)
+    @app.delete(
+        "/api/categories/{category_id}",
+        status_code=204,
+        dependencies=[Depends(require_session)],
+    )
     def delete_category(category_id: str) -> None:
         with engine.begin() as connection:
             category = connection.execute(
@@ -366,7 +375,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 {"category_id": category_id},
             )
 
-    @app.post("/api/items", status_code=201)
+    @app.post("/api/items", status_code=201, dependencies=[Depends(require_session)])
     def capture_item(request: CaptureRequest) -> dict[str, str]:
         submission_id = str(uuid4())
         item_id = str(uuid4())
@@ -400,7 +409,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             )
         return {"id": item_id, "submission_id": submission_id, "status": "inbox"}
 
-    @app.get("/api/items")
+    @app.get("/api/items", dependencies=[Depends(require_session)])
     def list_items(status: str | None = None) -> list[dict[str, object]]:
         query = """
             SELECT items.id, items.title, items.summary, items.tags_json, items.status,
@@ -419,7 +428,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             rows = connection.execute(text(query), parameters).mappings().all()
         return [dict(row) for row in rows]
 
-    @app.get("/api/items/{item_id}")
+    @app.get("/api/items/{item_id}", dependencies=[Depends(require_session)])
     def get_item(item_id: str) -> dict[str, object]:
         with engine.connect() as connection:
             item = connection.execute(
@@ -460,7 +469,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         result["attachments"] = [dict(attachment) for attachment in attachments]
         return result
 
-    @app.patch("/api/items/{item_id}")
+    @app.patch("/api/items/{item_id}", dependencies=[Depends(require_session)])
     def update_item(item_id: str, request: ItemUpdateRequest) -> dict[str, object]:
         if not request.model_fields_set:
             raise HTTPException(status_code=422, detail="At least one item field is required")
@@ -534,7 +543,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             "status": target_status.value if target_status else current_status.value,
         }
 
-    @app.post("/api/items/{item_id}/convert")
+    @app.post("/api/items/{item_id}/convert", dependencies=[Depends(require_session)])
     def convert_item(item_id: str) -> dict[str, object]:
         run_id = str(uuid4())
         conversion_error: str | None = None
@@ -613,7 +622,11 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
 
         return {"id": item_id, "status": "draft", "conversion_run_id": run_id}
 
-    @app.post("/api/items/upload", status_code=201)
+    @app.post(
+        "/api/items/upload",
+        status_code=201,
+        dependencies=[Depends(require_session)],
+    )
     async def upload_item(
         file: UploadFile = File(...),
         title: str | None = Form(default=None),
@@ -689,7 +702,11 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             "size_bytes": len(content),
         }
 
-    @app.post("/api/items/url", status_code=201)
+    @app.post(
+        "/api/items/url",
+        status_code=201,
+        dependencies=[Depends(require_session)],
+    )
     def capture_url(url: str, title: str | None = None) -> dict[str, str | int]:
         if not url.startswith(("http://", "https://")):
             raise HTTPException(status_code=422, detail="URL must use http or https")
