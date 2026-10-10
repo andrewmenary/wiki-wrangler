@@ -137,7 +137,7 @@ def validate_repository_values(
             raise HTTPException(status_code=422, detail="Repository name is required")
     if "remote_url" in values:
         remote_url = str(values["remote_url"]).strip()
-        if not remote_url.startswith(("https://", "http://", "ssh://", "git@")):
+        if not remote_url.startswith(("https://", "http://", "ssh://", "git@", "file://")):
             raise HTTPException(status_code=422, detail="Unsupported repository URL")
         values["remote_url"] = remote_url
     if "default_branch" in values:

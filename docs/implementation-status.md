@@ -92,6 +92,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Clone/update/push orchestration core with branch-aware integration coverage
   - [x] Git installed and persistent publish workspace configured in Compose
   - [x] Synchronous approved-item publish API boundary
+  - [x] End-to-end API publish test against a local bare Git remote
 - [ ] Raw and curated Git paths
   - [x] Approved-item publication path preview API
   - [x] Curated front matter links back to source and raw path

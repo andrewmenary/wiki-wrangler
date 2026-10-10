@@ -1,4 +1,5 @@
 import sqlite3
+import subprocess
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 
@@ -277,6 +278,74 @@ async def test_approved_item_can_be_published_and_recorded(
     assert publication.json()["curated_path"] == "curated/runbooks/service-guide.md"
     audit = await authenticated_client.get(f"/api/audit?item_id={item_id}")
     assert any(event["action"] == "item.published" for event in audit.json())
+
+
+async def test_publish_endpoint_pushes_to_local_git_remote(
+    authenticated_client: httpx.AsyncClient,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    subprocess.run(["git", "init", "-b", "main", str(seed)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(seed), "config", "user.name", "Wiki Wrangler"], check=True)
+    subprocess.run(
+        ["git", "-C", str(seed), "config", "user.email", "wiki@example.com"], check=True
+    )
+    (seed / "README.md").write_text("Wiki", encoding="utf-8")
+    subprocess.run(["git", "-C", str(seed), "add", "README.md"], check=True)
+    subprocess.run(["git", "-C", str(seed), "commit", "-m", "Initial"], check=True)
+    remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(seed), "remote", "add", "origin", str(remote)], check=True
+    )
+    subprocess.run(
+        ["git", "-C", str(seed), "push", "origin", "main"],
+        check=True,
+        capture_output=True,
+    )
+    monkeypatch.setenv("WIKI_WRANGLER_PUBLISH_WORKSPACE", str(tmp_path / "workspace"))
+
+    repository = await authenticated_client.post(
+        "/api/repositories",
+        json={
+            "name": "Local Wiki",
+            "remote_url": remote.as_uri(),
+            "credential_ref": "local-test",
+            "is_default": True,
+        },
+    )
+    category = await authenticated_client.post(
+        "/api/categories",
+        json={"name": "Runbooks", "path": "runbooks"},
+    )
+    upload = await authenticated_client.post(
+        "/api/items/upload",
+        files={"file": ("notes.txt", b"Restart steps", "text/plain")},
+        data={"title": "Service Guide"},
+    )
+    item_id = upload.json()["id"]
+    await authenticated_client.post(f"/api/items/{item_id}/convert")
+    await authenticated_client.patch(
+        f"/api/items/{item_id}",
+        json={"category_id": category.json()["id"], "status": "review"},
+    )
+    await authenticated_client.patch(
+        f"/api/items/{item_id}", json={"status": "approved"}
+    )
+
+    published = await authenticated_client.post(f"/api/items/{item_id}/publish")
+
+    assert repository.status_code == 201
+    assert published.status_code == 200
+    verification = tmp_path / "verification"
+    subprocess.run(
+        ["git", "clone", "--branch", "main", str(remote), str(verification)],
+        check=True,
+        capture_output=True,
+    )
+    assert (verification / "curated/runbooks/service-guide.md").exists()
 
 
 async def test_capture_creates_inbox_item(authenticated_client: httpx.AsyncClient) -> None:
