@@ -84,6 +84,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Admin API for repository targets, roots, and default selection
   - [x] Repository Settings UI
 - [ ] Publish worker
+  - [x] Tested Git worktree publisher core for raw/curated writes and idempotent commits
 - [ ] Raw and curated Git paths
   - [x] Approved-item publication path preview API
 - [ ] Publication records and commit links
