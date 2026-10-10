@@ -22,6 +22,7 @@ from app.db import (
     initialize_database,
 )
 from app.domain.items import ItemStatus, can_transition
+from app.publisher import publish_remote
 
 
 class CaptureRequest(BaseModel):
@@ -768,6 +769,104 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             "repository_name": repository["name"],
             "raw_path": f"{repository['raw_root']}/{source_type}/{item_id}/{filename}",
             "curated_path": f"{repository['curated_root']}/{category_path}/{title_slug}.md",
+        }
+
+    @app.post("/api/items/{item_id}/publish", dependencies=[Depends(require_session)])
+    def publish_item(
+        item_id: str,
+        repository_id: str | None = None,
+        user: dict[str, object] = Depends(current_user),
+    ) -> dict[str, object]:
+        preview = publication_preview(item_id, repository_id)
+        with engine.connect() as connection:
+            item = connection.execute(
+                text(
+                    """
+                    SELECT items.title, items.markdown_final, attachments.storage_path,
+                        repositories.remote_url, repositories.default_branch
+                    FROM items
+                    JOIN repositories ON repositories.id = :repository_id
+                    LEFT JOIN attachments ON attachments.item_id = items.id
+                    WHERE items.id = :item_id
+                    ORDER BY attachments.created_at
+                    LIMIT 1
+                    """
+                ),
+                {"item_id": item_id, "repository_id": preview["repository_id"]},
+            ).mappings().first()
+        if item is None:
+            raise HTTPException(status_code=404, detail="Item not found")
+        workspace_root = Path(
+            os.getenv("WIKI_WRANGLER_PUBLISH_WORKSPACE", "data/publish-workspaces")
+        )
+        workspace = workspace_root / str(preview["repository_id"])
+        raw_source = storage_root / item["storage_path"] if item["storage_path"] else None
+        if raw_source is None:
+            raise HTTPException(status_code=422, detail="Item has no source attachment")
+        try:
+            result = publish_remote(
+                item["remote_url"],
+                workspace,
+                item["default_branch"],
+                raw_source,
+                preview["raw_path"],
+                preview["curated_path"],
+                item["markdown_final"] or "",
+                f"Publish {item['title']}",
+            )
+        except Exception as error:
+            raise HTTPException(status_code=502, detail=f"Git publish failed: {error}") from error
+
+        publication_id = str(uuid4())
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE items SET status = 'published' WHERE id = :item_id"),
+                {"item_id": item_id},
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO publications
+                        (id, item_id, repository_id, raw_path, curated_path,
+                         commit_sha, branch, published_by)
+                    VALUES
+                        (:id, :item_id, :repository_id, :raw_path, :curated_path,
+                         :commit_sha, :branch, :published_by)
+                    """
+                ),
+                {
+                    "id": publication_id,
+                    "item_id": item_id,
+                    "repository_id": preview["repository_id"],
+                    "raw_path": preview["raw_path"],
+                    "curated_path": preview["curated_path"],
+                    "commit_sha": result.commit_sha,
+                    "branch": item["default_branch"],
+                    "published_by": user["id"],
+                },
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (id, item_id, user_id, action, details_json)
+                    VALUES (:id, :item_id, :user_id, 'item.published', :details_json)
+                    """
+                ),
+                {
+                    "id": str(uuid4()),
+                    "item_id": item_id,
+                    "user_id": user["id"],
+                    "details_json": json.dumps(
+                        {"repository_id": preview["repository_id"], "commit_sha": result.commit_sha}
+                    ),
+                },
+            )
+        return {
+            "id": publication_id,
+            "status": "published",
+            "commit_sha": result.commit_sha,
+            "raw_path": preview["raw_path"],
+            "curated_path": preview["curated_path"],
         }
 
     @app.get("/api/items/{item_id}/source", dependencies=[Depends(require_session)])

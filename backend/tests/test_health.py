@@ -7,6 +7,7 @@ import pytest
 
 from app import main
 from app.main import create_app
+from app.publisher import PublishResult
 
 
 @pytest.fixture
@@ -226,6 +227,52 @@ async def test_approved_item_resolves_repository_publication_paths(
     assert preview.status_code == 200
     assert preview.json()["raw_path"] == f"sources/file/{item_id}/notes.txt"
     assert preview.json()["curated_path"] == "knowledge/runbooks/service-guide.md"
+
+
+async def test_approved_item_can_be_published_and_recorded(
+    authenticated_client: httpx.AsyncClient,
+    monkeypatch,
+) -> None:
+    repository = await authenticated_client.post(
+        "/api/repositories",
+        json={
+            "name": "Work Wiki",
+            "remote_url": "https://github.com/example/work-wiki.git",
+            "credential_ref": "github-work",
+            "is_default": True,
+        },
+    )
+    category = await authenticated_client.post(
+        "/api/categories",
+        json={"name": "Runbooks", "path": "runbooks"},
+    )
+    upload = await authenticated_client.post(
+        "/api/items/upload",
+        files={"file": ("notes.txt", b"Restart steps", "text/plain")},
+        data={"title": "Service Guide"},
+    )
+    item_id = upload.json()["id"]
+    await authenticated_client.post(f"/api/items/{item_id}/convert")
+    await authenticated_client.patch(
+        f"/api/items/{item_id}",
+        json={"category_id": category.json()["id"], "status": "review"},
+    )
+    await authenticated_client.patch(
+        f"/api/items/{item_id}", json={"status": "approved"}
+    )
+
+    def fake_publish(*args, **kwargs):
+        return PublishResult(commit_sha="abc123", changed=True)
+
+    monkeypatch.setattr(main, "publish_remote", fake_publish)
+    published = await authenticated_client.post(f"/api/items/{item_id}/publish")
+
+    assert repository.status_code == 201
+    assert published.status_code == 200
+    assert published.json()["status"] == "published"
+    assert published.json()["commit_sha"] == "abc123"
+    audit = await authenticated_client.get(f"/api/audit?item_id={item_id}")
+    assert any(event["action"] == "item.published" for event in audit.json())
 
 
 async def test_capture_creates_inbox_item(authenticated_client: httpx.AsyncClient) -> None:

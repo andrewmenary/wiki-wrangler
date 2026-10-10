@@ -90,10 +90,12 @@ configuration, while partial items are intentionally called out in the notes.
 - [ ] Publish worker
   - [x] Tested Git worktree publisher core for raw/curated writes and idempotent commits
   - [x] Clone/update/push orchestration core with branch-aware integration coverage
+  - [x] Synchronous approved-item publish API boundary
 - [ ] Raw and curated Git paths
   - [x] Approved-item publication path preview API
 - [ ] Publication records and commit links
   - [x] Publication and audit schema foundation
+  - [x] Publish API persists commit and resolved path metadata
 - [ ] Audit log
   - [x] Authenticated item edit and approval events recorded
   - [x] Administrator audit feed API and workspace viewer
