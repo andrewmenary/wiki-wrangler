@@ -256,6 +256,26 @@ async def test_categories_support_hierarchy_and_item_assignment(client: httpx.As
     assert (await client.delete(f"/api/categories/{removable.json()['id']}")).status_code == 204
 
 
+async def test_category_updates_reject_ancestry_cycles(client: httpx.AsyncClient) -> None:
+    root = await client.post("/api/categories", json={"name": "Root", "path": "root"})
+    middle = await client.post(
+        "/api/categories",
+        json={"name": "Middle", "path": "root/middle", "parent_id": root.json()["id"]},
+    )
+    leaf = await client.post(
+        "/api/categories",
+        json={"name": "Leaf", "path": "root/middle/leaf", "parent_id": middle.json()["id"]},
+    )
+
+    response = await client.patch(
+        f"/api/categories/{root.json()['id']}",
+        json={"parent_id": leaf.json()["id"]},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Category hierarchy cannot contain a cycle"
+
+
 async def test_draft_can_be_archived_without_hard_deleting_it(client: httpx.AsyncClient) -> None:
     capture = await client.post(
         "/api/items",

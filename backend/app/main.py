@@ -293,6 +293,21 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 if "parent_id" in request.model_fields_set
                 else category["parent_id"]
             )
+            if parent_id is not None:
+                ancestor_id = parent_id
+                visited: set[str] = set()
+                while ancestor_id is not None:
+                    if ancestor_id == category_id or ancestor_id in visited:
+                        raise HTTPException(
+                            status_code=422,
+                            detail="Category hierarchy cannot contain a cycle",
+                        )
+                    visited.add(ancestor_id)
+                    ancestor = connection.execute(
+                        text("SELECT parent_id FROM categories WHERE id = :category_id"),
+                        {"category_id": ancestor_id},
+                    ).first()
+                    ancestor_id = ancestor[0] if ancestor is not None else None
             if not name or not path:
                 raise HTTPException(status_code=422, detail="Category name and path are required")
             try:
