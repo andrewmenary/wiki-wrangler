@@ -47,7 +47,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [ ] Docling PDF/OCR path
   - [ ] Async conversion worker
 - [x] Conversion failure state for unsupported built-in formats
-- [ ] Basic Inbox UI
+- [x] Basic Inbox UI
 
 ## Phase 2 - Review and Approval
 

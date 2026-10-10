@@ -17,6 +17,7 @@
     }
 
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body {
       margin: 0;
       min-height: 100vh;
@@ -94,6 +95,20 @@
     }
     .switch button { padding: 0; color: var(--accent-dark); background: transparent; text-decoration: underline; }
     .message { min-height: 1.25rem; margin: 1rem 0 0; color: var(--accent-dark); font: .9rem Arial, sans-serif; }
+    .workspace-head { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
+    .workspace-head h2 { margin-bottom: .2rem; }
+    .workspace-head p { margin: 0; color: var(--muted); font: .85rem Arial, sans-serif; }
+    .quiet-button { padding: .2rem 0; color: var(--accent-dark); background: transparent; font-size: .75rem; }
+    .quiet-button:hover { background: transparent; text-decoration: underline; }
+    .capture-form { display: grid; gap: .65rem; margin: 1.7rem 0; }
+    .capture-form input { font-size: .95rem; }
+    .capture-form button { width: 100%; }
+    .inbox { display: grid; gap: .65rem; margin-top: 1.5rem; }
+    .inbox-label { color: var(--muted); font: 700 .72rem Arial, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+    .item { padding: .9rem; border-top: 1px solid var(--line); }
+    .item h3 { margin: 0 0 .3rem; font-size: 1.05rem; }
+    .item p { margin: 0; color: var(--muted); font: .78rem Arial, sans-serif; }
+    .empty { color: var(--muted); font: .9rem Arial, sans-serif; }
     @media (max-width: 760px) {
       main { grid-template-columns: 1fr; align-content: center; gap: 2.5rem; }
       .intro p { margin-top: 1.2rem; }
@@ -108,29 +123,54 @@
       <p>Capture the useful fragments, shape them into durable notes, and keep your team wiki worth returning to.</p>
     </section>
     <section class="panel" aria-live="polite">
-      <h2 id="form-title">Welcome back</h2>
-      <p class="subcopy" id="form-copy">Sign in to continue to your inbox.</p>
-      <form id="auth-form">
-        <label id="name-field" hidden>
-          Display name
-          <input id="display-name" name="display_name" autocomplete="name">
-        </label>
-        <label>
-          Email
-          <input id="email" name="email" type="email" autocomplete="email" required>
-        </label>
-        <label>
-          Password
-          <input id="password" name="password" type="password" minlength="8" autocomplete="current-password" required>
-        </label>
-        <button id="submit-button" type="submit">Sign in</button>
-      </form>
-      <p class="message" id="message" role="status"></p>
-      <p class="switch"><span id="switch-copy">New here?</span> <button id="switch-button" type="button">Create an account</button></p>
+      <div id="auth-view">
+        <h2 id="form-title">Welcome back</h2>
+        <p class="subcopy" id="form-copy">Sign in to continue to your inbox.</p>
+        <form id="auth-form">
+          <label id="name-field" hidden>
+            Display name
+            <input id="display-name" name="display_name" autocomplete="name">
+          </label>
+          <label>
+            Email
+            <input id="email" name="email" type="email" autocomplete="email" required>
+          </label>
+          <label>
+            Password
+            <input id="password" name="password" type="password" minlength="8" autocomplete="current-password" required>
+          </label>
+          <button id="submit-button" type="submit">Sign in</button>
+        </form>
+        <p class="message" id="message" role="status"></p>
+        <p class="switch"><span id="switch-copy">New here?</span> <button id="switch-button" type="button">Create an account</button></p>
+      </div>
+      <div id="app-view" hidden>
+        <div class="workspace-head">
+          <div>
+            <h2>Inbox</h2>
+            <p id="user-greeting"></p>
+          </div>
+          <button class="quiet-button" id="logout-button" type="button">Sign out</button>
+        </div>
+        <form class="capture-form" id="url-form">
+          <label>
+            Capture a web page
+            <input id="url-input" type="url" placeholder="https://example.com/article" required>
+          </label>
+          <button type="submit">Add to inbox</button>
+        </form>
+        <p class="message" id="capture-message" role="status"></p>
+        <div class="inbox">
+          <div class="inbox-label">Recent captures</div>
+          <div id="item-list"><p class="empty">No captures yet.</p></div>
+        </div>
+      </div>
     </section>
   </main>
   <script>
     const form = document.querySelector("#auth-form");
+    const authView = document.querySelector("#auth-view");
+    const appView = document.querySelector("#app-view");
     const nameField = document.querySelector("#name-field");
     const displayName = document.querySelector("#display-name");
     const formTitle = document.querySelector("#form-title");
@@ -139,6 +179,11 @@
     const switchCopy = document.querySelector("#switch-copy");
     const switchButton = document.querySelector("#switch-button");
     const message = document.querySelector("#message");
+    const userGreeting = document.querySelector("#user-greeting");
+    const itemList = document.querySelector("#item-list");
+    const urlForm = document.querySelector("#url-form");
+    const urlInput = document.querySelector("#url-input");
+    const captureMessage = document.querySelector("#capture-message");
     let registering = false;
 
     function setMode(nextRegistering) {
@@ -157,6 +202,50 @@
       message.textContent = "";
     });
 
+    async function loadItems() {
+      const response = await fetch("/api/items", { credentials: "same-origin" });
+      if (!response.ok) throw new Error("Could not load the inbox");
+      const items = await response.json();
+      const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[character]);
+      itemList.innerHTML = items.length
+        ? items.map((item) => `<article class="item"><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.status)} · ${escapeHtml(item.source_type)}</p></article>`).join("")
+        : '<p class="empty">No captures yet.</p>';
+    }
+
+    function showApp(user) {
+      authView.hidden = true;
+      appView.hidden = false;
+      userGreeting.textContent = `Signed in as ${user.display_name}.`;
+      loadItems().catch((error) => { captureMessage.textContent = error.message; });
+    }
+
+    document.querySelector("#logout-button").addEventListener("click", async () => {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+      appView.hidden = true;
+      authView.hidden = false;
+      message.textContent = "Signed out.";
+    });
+
+    urlForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureMessage.textContent = "Fetching page...";
+      const url = encodeURIComponent(urlInput.value);
+      try {
+        const response = await fetch(`/api/items/url?url=${url}`, {
+          method: "POST", credentials: "same-origin"
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Could not capture URL");
+        urlInput.value = "";
+        captureMessage.textContent = "Added to inbox.";
+        await loadItems();
+      } catch (error) {
+        captureMessage.textContent = error.message;
+      }
+    });
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       message.textContent = "Working...";
@@ -172,9 +261,11 @@
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.detail || "Authentication failed");
-        message.textContent = registering
+        const successMessage = registering
           ? `Account created. Signed in as ${body.display_name}.`
           : `Signed in as ${body.display_name}.`;
+        message.textContent = successMessage;
+        showApp(body);
         if (registering) {
           setMode(false);
           displayName.value = "";
@@ -183,6 +274,10 @@
         message.textContent = error.message;
       }
     });
+
+    fetch("/api/auth/me", { credentials: "same-origin" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((user) => { if (user) showApp(user); });
   </script>
 </body>
 </html>
