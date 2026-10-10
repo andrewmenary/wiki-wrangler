@@ -118,8 +118,11 @@
     .category-form { display: grid; gap: .65rem; margin-top: 1rem; }
     .category-form button { width: 100%; }
     .category-list { display: grid; gap: .4rem; margin-top: 1rem; }
-    .category-row { display: flex; justify-content: space-between; gap: .5rem; align-items: center; font: .8rem Arial, sans-serif; }
-    .category-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .category-row { display: flex; justify-content: space-between; gap: .8rem; align-items: center; font: .8rem Arial, sans-serif; }
+    .category-label { display: grid; gap: .15rem; min-width: 0; }
+    .category-label strong, .category-label small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .category-label small { color: var(--muted); font: .72rem Arial, sans-serif; }
+    .category-actions { display: flex; flex-shrink: 0; gap: .2rem; }
     .category-row button { padding: .2rem .4rem; color: var(--accent-dark); background: transparent; font-size: .72rem; }
     .category-row button:hover { background: transparent; text-decoration: underline; }
     .review textarea { width: 100%; min-height: 180px; resize: vertical; }
@@ -339,7 +342,7 @@
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
       })[character]);
       categoryList.innerHTML = categories.length
-        ? categories.map((category) => `<div class="category-row"><span>${escapeHtml(category.path)}</span><span><button type="button" data-edit-category="${category.id}">Edit</button><button type="button" data-delete-category="${category.id}">Delete</button></span></div>`).join("")
+        ? categories.map((category) => `<div class="category-row"><div class="category-label"><strong>${escapeHtml(category.name)}</strong><small>${escapeHtml(category.path)}</small></div><span class="category-actions"><button type="button" data-edit-category="${category.id}">Edit</button><button type="button" data-delete-category="${category.id}">Delete</button></span></div>`).join("")
         : '<p class="empty">No categories yet.</p>';
     }
 

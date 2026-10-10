@@ -71,6 +71,7 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
 
   const originalRow = page.locator(".category-row").filter({ hasText: originalPath });
   await expect(originalRow).toBeVisible();
+  await expect(originalRow).toContainText("Notes");
 
   await categoryForm.getByLabel("Name", { exact: true }).fill("Duplicate");
   await categoryForm.getByLabel("Path segment", { exact: true }).fill("notes");
@@ -86,6 +87,7 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
   await categoryForm.getByRole("button", { name: "Save category" }).click();
   const editedRow = page.locator(".category-row").filter({ hasText: editedPath });
   await expect(editedRow).toBeVisible();
+  await expect(editedRow).toContainText("Guides");
   await expect(originalRow).toHaveCount(0);
 
   await page.reload();
