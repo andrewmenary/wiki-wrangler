@@ -312,6 +312,13 @@ async def test_draft_can_be_archived_without_hard_deleting_it(client: httpx.Asyn
     detail = await client.get(f"/api/items/{capture.json()['id']}")
     assert detail.json()["status"] == "archived"
 
+    edit = await client.patch(
+        f"/api/items/{capture.json()['id']}",
+        json={"summary": "Should remain unchanged"},
+    )
+    assert edit.status_code == 409
+    assert edit.json()["detail"] == "Archived items cannot be changed"
+
 
 async def test_invalid_item_transition_is_rejected(client: httpx.AsyncClient) -> None:
     capture = await client.post(

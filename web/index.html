@@ -352,7 +352,7 @@
       reviewTags.value = (selectedItem.tags || []).join(", ");
       reviewCategory.value = selectedItem.category_id || "";
       reviewMarkdown.value = selectedItem.markdown_final || selectedItem.markdown_generated || "";
-      reviewSave.hidden = selectedItem.status === "approved";
+      reviewSave.hidden = ["approved", "archived"].includes(selectedItem.status);
       reviewApprove.hidden = selectedItem.status !== "review";
       reviewArchive.hidden = !["inbox", "draft", "review", "error"].includes(selectedItem.status);
       reviewMessage.textContent = `Status: ${selectedItem.status}`;

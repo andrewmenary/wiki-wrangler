@@ -483,6 +483,8 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 raise HTTPException(status_code=404, detail="Item not found")
 
             current_status = ItemStatus(item["status"])
+            if current_status is ItemStatus.ARCHIVED and target_status is None:
+                raise HTTPException(status_code=409, detail="Archived items cannot be changed")
             if target_status is not None and not can_transition(current_status, target_status):
                 raise HTTPException(
                     status_code=409,

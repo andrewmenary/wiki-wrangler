@@ -14,7 +14,7 @@ test("a user can register, restore a session, sign out, and sign back in", async
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Create account" }).click();
 
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
   await expect(greeting).toBeVisible();
   await expect(page.getByLabel("Display name")).toBeHidden();
 
@@ -168,7 +168,7 @@ test("an Inbox capture can be discarded without deleting its history", async ({ 
   expect(capture.status()).toBe(201);
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
   const item = page.locator(".item").filter({ hasText: "Discard from Inbox" });
   await item.getByRole("button").click();
   await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
@@ -176,5 +176,6 @@ test("an Inbox capture can be discarded without deleting its history", async ({ 
   await expect(page.locator("#review-message")).toHaveText(
     "Archived. The capture remains available in Inbox history.",
   );
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeHidden();
   await expect(item).toContainText("archived");
 });
