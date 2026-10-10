@@ -320,6 +320,7 @@ async def test_text_upload_can_be_converted_to_draft(
 
 async def test_item_can_be_reviewed_edited_and_approved(
     authenticated_client: httpx.AsyncClient,
+    tmp_path,
 ) -> None:
     upload = await authenticated_client.post(
         "/api/items/upload",
@@ -350,6 +351,16 @@ async def test_item_can_be_reviewed_edited_and_approved(
     assert detail.json()["markdown_final"] == "Edited notes"
     assert detail.json()["summary"] == "A concise summary"
     assert detail.json()["tags"] == ["meeting", "planning"]
+
+    with sqlite3.connect(tmp_path / "test.sqlite3") as database:
+        actions = [
+            row[0]
+            for row in database.execute(
+                "SELECT action FROM audit_events WHERE item_id = ? ORDER BY occurred_at",
+                (item_id,),
+            )
+        ]
+    assert "item.approved" in actions
 
     listed = await authenticated_client.get("/api/items")
     listed_item = next(item for item in listed.json() if item["id"] == item_id)

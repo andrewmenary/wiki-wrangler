@@ -95,6 +95,7 @@ configuration, while partial items are intentionally called out in the notes.
 - [ ] Publication records and commit links
   - [x] Publication and audit schema foundation
 - [ ] Audit log
+  - [x] Authenticated item edit and approval events recorded
 
 ## Later Phases
 

@@ -796,7 +796,11 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         }
 
     @app.patch("/api/items/{item_id}", dependencies=[Depends(require_session)])
-    def update_item(item_id: str, request: ItemUpdateRequest) -> dict[str, object]:
+    def update_item(
+        item_id: str,
+        request: ItemUpdateRequest,
+        user: dict[str, object] = Depends(current_user),
+    ) -> dict[str, object]:
         if not request.model_fields_set:
             raise HTTPException(status_code=422, detail="At least one item field is required")
         if request.title is not None and not request.title.strip():
@@ -862,6 +866,28 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     """
                 ),
                 {"item_id": item_id, **update_fields},
+            )
+            action = (
+                "item.approved"
+                if target_status is ItemStatus.APPROVED
+                else "item.status_changed"
+                if target_status is not None
+                else "item.edited"
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (id, item_id, user_id, action, details_json)
+                    VALUES (:id, :item_id, :user_id, :action, :details_json)
+                    """
+                ),
+                {
+                    "id": str(uuid4()),
+                    "item_id": item_id,
+                    "user_id": user["id"],
+                    "action": action,
+                    "details_json": json.dumps({"fields": sorted(request.model_fields_set)}),
+                },
             )
 
         return {
