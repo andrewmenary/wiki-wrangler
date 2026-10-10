@@ -87,6 +87,9 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Display Name hidden during sign-in
   - [x] Registration transitions to the Inbox
   - [x] Inbox loads captures and categories
+  - [x] Committed Playwright test verifies session restoration after refresh
+  - [x] Committed Playwright test verifies sign-out persists after refresh
+  - [x] Committed Playwright test verifies invalid credentials and returning login
 - [ ] Repeat browser smoke test after future UI changes
 - [x] Add committed automated Playwright test suite
 - [x] Configure Playwright suite in CI
