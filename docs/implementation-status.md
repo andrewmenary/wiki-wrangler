@@ -90,6 +90,7 @@ configuration, while partial items are intentionally called out in the notes.
 - [ ] Publish worker
   - [x] Tested Git worktree publisher core for raw/curated writes and idempotent commits
   - [x] Clone/update/push orchestration core with branch-aware integration coverage
+  - [x] Git installed and persistent publish workspace configured in Compose
   - [x] Synchronous approved-item publish API boundary
 - [ ] Raw and curated Git paths
   - [x] Approved-item publication path preview API

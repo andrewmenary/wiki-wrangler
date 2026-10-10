@@ -7,6 +7,7 @@ services:
       context: ../backend
     environment:
       WIKI_WRANGLER_STORAGE_PATH: /data/storage
+      WIKI_WRANGLER_PUBLISH_WORKSPACE: /data/publish-workspaces
     tmpfs:
       - /data
     healthcheck:

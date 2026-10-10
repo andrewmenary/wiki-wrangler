@@ -19,6 +19,7 @@ services:
       - "8000:8000"
     environment:
       WIKI_WRANGLER_STORAGE_PATH: /data/storage
+      WIKI_WRANGLER_PUBLISH_WORKSPACE: /data/publish-workspaces
     volumes:
       - wiki-wrangler-data:/data
 
