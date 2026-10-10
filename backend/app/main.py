@@ -19,6 +19,7 @@ from app.db import (
     database_url_for_path,
     initialize_database,
 )
+from app.domain.items import ItemStatus, can_transition
 
 
 class CaptureRequest(BaseModel):
@@ -37,6 +38,12 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class ItemUpdateRequest(BaseModel):
+    title: str | None = None
+    markdown_final: str | None = None
+    status: str | None = None
 
 
 ALLOWED_UPLOAD_EXTENSIONS = {".csv", ".docx", ".md", ".pdf", ".pptx", ".txt", ".xlsx"}
@@ -279,6 +286,56 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         result = dict(item)
         result["attachments"] = [dict(attachment) for attachment in attachments]
         return result
+
+    @app.patch("/api/items/{item_id}")
+    def update_item(item_id: str, request: ItemUpdateRequest) -> dict[str, object]:
+        if request.title is None and request.markdown_final is None and request.status is None:
+            raise HTTPException(status_code=422, detail="At least one item field is required")
+        if request.title is not None and not request.title.strip():
+            raise HTTPException(status_code=422, detail="Title cannot be empty")
+
+        target_status: ItemStatus | None = None
+        if request.status is not None:
+            try:
+                target_status = ItemStatus(request.status)
+            except ValueError as error:
+                raise HTTPException(status_code=422, detail="Unknown item status") from error
+
+        with engine.begin() as connection:
+            item = connection.execute(
+                text("SELECT status FROM items WHERE id = :item_id"),
+                {"item_id": item_id},
+            ).mappings().first()
+            if item is None:
+                raise HTTPException(status_code=404, detail="Item not found")
+
+            current_status = ItemStatus(item["status"])
+            if target_status is not None and not can_transition(current_status, target_status):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Cannot transition item from {current_status} to {target_status}",
+                )
+
+            connection.execute(
+                text("""
+                    UPDATE items
+                    SET title = COALESCE(:title, title),
+                        markdown_final = COALESCE(:markdown_final, markdown_final),
+                        status = COALESCE(:status, status)
+                    WHERE id = :item_id
+                    """),
+                {
+                    "item_id": item_id,
+                    "title": request.title.strip() if request.title is not None else None,
+                    "markdown_final": request.markdown_final,
+                    "status": target_status.value if target_status is not None else None,
+                },
+            )
+
+        return {
+            "id": item_id,
+            "status": target_status.value if target_status else current_status.value,
+        }
 
     @app.post("/api/items/{item_id}/convert")
     def convert_item(item_id: str) -> dict[str, object]:

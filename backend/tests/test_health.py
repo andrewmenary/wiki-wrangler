@@ -150,6 +150,45 @@ async def test_text_upload_can_be_converted_to_draft(client: httpx.AsyncClient) 
     assert detail.json()["markdown_final"] == "# Meeting notes"
 
 
+async def test_item_can_be_reviewed_edited_and_approved(client: httpx.AsyncClient) -> None:
+    upload = await client.post(
+        "/api/items/upload",
+        files={"file": ("notes.txt", b"Original notes", "text/plain")},
+    )
+    item_id = upload.json()["id"]
+    await client.post(f"/api/items/{item_id}/convert")
+
+    review = await client.patch(
+        f"/api/items/{item_id}",
+        json={"markdown_final": "Edited notes", "status": "review"},
+    )
+    assert review.status_code == 200
+    assert review.json()["status"] == "review"
+
+    approved = await client.patch(
+        f"/api/items/{item_id}",
+        json={"status": "approved"},
+    )
+    assert approved.status_code == 200
+    detail = await client.get(f"/api/items/{item_id}")
+    assert detail.json()["status"] == "approved"
+    assert detail.json()["markdown_final"] == "Edited notes"
+
+
+async def test_invalid_item_transition_is_rejected(client: httpx.AsyncClient) -> None:
+    capture = await client.post(
+        "/api/items",
+        json={"title": "Draft", "source_type": "manual", "markdown": "Text"},
+    )
+
+    response = await client.patch(
+        f"/api/items/{capture.json()['id']}",
+        json={"status": "approved"},
+    )
+
+    assert response.status_code == 409
+
+
 async def test_unsupported_conversion_marks_item_as_error(client: httpx.AsyncClient) -> None:
     upload = await client.post(
         "/api/items/upload",
@@ -177,7 +216,9 @@ async def test_url_capture_extracts_text_and_preserves_source(
         def read(self, limit: int) -> bytes:
             return (
                 b"<html><head><title>Useful page</title><script>ignored()</script>"
-                b"</head><body><h1>Heading</h1><p>Body text</p></body></html>"
+                b"</head><body><h1>Heading</h1><p><strong>Body</strong> text</p>"
+                b"<ul><li>First</li><li><a href='https://example.com'>Second</a></li></ul>"
+                b"</body></html>"
             )
 
     monkeypatch.setattr(main, "urlopen", lambda request, timeout: FakeResponse())
@@ -191,5 +232,7 @@ async def test_url_capture_extracts_text_and_preserves_source(
     item = (await client.get(f"/api/items/{response.json()['id']}")).json()
     assert item["status"] == "draft"
     assert item["title"] == "Useful page"
-    assert item["markdown_final"] == "Heading\n\nBody text"
+    assert item["markdown_final"] == (
+        "# Heading\n\n**Body** text\n\n- First\n\n- [Second](https://example.com)"
+    )
     assert item["attachments"][0]["filename"] == "source.html"

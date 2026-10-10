@@ -37,7 +37,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Upload size limit
 - [x] URL submission endpoint
   - [x] HTTP/HTTPS validation
-  - [x] HTML title and readable-text extraction
+  - [x] Basic HTML-to-Markdown structure extraction
   - [x] Raw HTML attachment storage
   - [x] Response size limit
 - [ ] Production conversion pipeline
@@ -51,10 +51,11 @@ configuration, while partial items are intentionally called out in the notes.
 
 ## Phase 2 - Review and Approval
 
-- [ ] Review API
-- [ ] Review screen
-- [ ] Editable Markdown and metadata fields
-- [ ] Status transition API
+- [x] Review API
+- [x] Review screen
+- [x] Editable Markdown field
+- [ ] Metadata fields
+- [x] Status transition API
 - [x] Domain-level status transition rules
 - [ ] Category CRUD and hierarchy
 

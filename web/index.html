@@ -108,6 +108,15 @@
     .item { padding: .9rem; border-top: 1px solid var(--line); }
     .item h3 { margin: 0 0 .3rem; font-size: 1.05rem; }
     .item p { margin: 0; color: var(--muted); font: .78rem Arial, sans-serif; }
+    .item button { width: 100%; padding: 0; color: var(--ink); background: transparent; text-align: left; }
+    .item button:hover { background: transparent; }
+    .review { margin-top: 1.8rem; padding-top: 1.3rem; border-top: 1px solid var(--line); }
+    .review h3 { margin: 0 0 1rem; font-size: 1.35rem; }
+    .review textarea { width: 100%; min-height: 180px; resize: vertical; }
+    .review-actions { display: flex; gap: .6rem; margin-top: .8rem; }
+    .review-actions button { flex: 1; }
+    .secondary-button { color: var(--ink); background: #ebe3d7; }
+    .secondary-button:hover { background: #dfd4c5; }
     .empty { color: var(--muted); font: .9rem Arial, sans-serif; }
     @media (max-width: 760px) {
       main { grid-template-columns: 1fr; align-content: center; gap: 2.5rem; }
@@ -164,6 +173,18 @@
           <div class="inbox-label">Recent captures</div>
           <div id="item-list"><p class="empty">No captures yet.</p></div>
         </div>
+        <div class="review" id="review-view" hidden>
+          <h3 id="review-title"></h3>
+          <label>
+            Markdown draft
+            <textarea id="review-markdown"></textarea>
+          </label>
+          <p class="message" id="review-message" role="status"></p>
+          <div class="review-actions">
+            <button class="secondary-button" id="review-save" type="button">Save changes</button>
+            <button id="review-approve" type="button">Approve</button>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -184,6 +205,13 @@
     const urlForm = document.querySelector("#url-form");
     const urlInput = document.querySelector("#url-input");
     const captureMessage = document.querySelector("#capture-message");
+    const reviewView = document.querySelector("#review-view");
+    const reviewTitle = document.querySelector("#review-title");
+    const reviewMarkdown = document.querySelector("#review-markdown");
+    const reviewMessage = document.querySelector("#review-message");
+    const reviewSave = document.querySelector("#review-save");
+    const reviewApprove = document.querySelector("#review-approve");
+    let selectedItem = null;
     let registering = false;
 
     function setMode(nextRegistering) {
@@ -210,9 +238,64 @@
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
       })[character]);
       itemList.innerHTML = items.length
-        ? items.map((item) => `<article class="item"><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.status)} · ${escapeHtml(item.source_type)}</p></article>`).join("")
+        ? items.map((item) => `<article class="item"><button type="button" data-item-id="${escapeHtml(item.id)}"><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.status)} · ${escapeHtml(item.source_type)}</p></button></article>`).join("")
         : '<p class="empty">No captures yet.</p>';
     }
+
+    async function openReview(itemId) {
+      const response = await fetch(`/api/items/${encodeURIComponent(itemId)}`, { credentials: "same-origin" });
+      if (!response.ok) throw new Error("Could not load the item");
+      selectedItem = await response.json();
+      reviewTitle.textContent = selectedItem.title;
+      reviewMarkdown.value = selectedItem.markdown_final || selectedItem.markdown_generated || "";
+      reviewSave.hidden = selectedItem.status === "approved";
+      reviewApprove.hidden = selectedItem.status !== "review";
+      reviewMessage.textContent = `Status: ${selectedItem.status}`;
+      reviewView.hidden = false;
+    }
+
+    itemList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-item-id]");
+      if (!button) return;
+      openReview(button.dataset.itemId).catch((error) => { captureMessage.textContent = error.message; });
+    });
+
+    async function updateSelectedItem(fields) {
+      const response = await fetch(`/api/items/${encodeURIComponent(selectedItem.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(fields)
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail || "Could not update the item");
+      await openReview(selectedItem.id);
+      await loadItems();
+    }
+
+    reviewSave.addEventListener("click", async () => {
+      if (!selectedItem) return;
+      reviewMessage.textContent = "Saving...";
+      try {
+        const fields = { markdown_final: reviewMarkdown.value };
+        if (selectedItem.status === "draft") fields.status = "review";
+        await updateSelectedItem(fields);
+        reviewMessage.textContent = "Changes saved.";
+      } catch (error) {
+        reviewMessage.textContent = error.message;
+      }
+    });
+
+    reviewApprove.addEventListener("click", async () => {
+      if (!selectedItem) return;
+      reviewMessage.textContent = "Approving...";
+      try {
+        await updateSelectedItem({ markdown_final: reviewMarkdown.value, status: "approved" });
+        reviewMessage.textContent = "Approved for publishing.";
+      } catch (error) {
+        reviewMessage.textContent = error.message;
+      }
+    });
 
     function showApp(user) {
       authView.hidden = true;
@@ -225,6 +308,8 @@
       await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
       appView.hidden = true;
       authView.hidden = false;
+      reviewView.hidden = true;
+      selectedItem = null;
       message.textContent = "Signed out.";
     });
 
