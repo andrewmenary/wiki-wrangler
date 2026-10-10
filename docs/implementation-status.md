@@ -16,6 +16,10 @@ configuration, while partial items are intentionally called out in the notes.
   repository.
 - Future enhancement: clone an existing item while preserving its source relationship,
   then independently edit its category and publication destination.
+- MVP publishing identity: use an existing GitHub account through a repository-scoped
+  credential reference; do not create a separate paid bot account.
+- Git commits identify the publishing service account, while the actual approver remains
+  attributed through publication and audit metadata.
 - Published records retain the resolved raw and curated paths used at publication time.
 
 ## Phase 0 - Foundations
