@@ -304,6 +304,7 @@
           <div class="review-actions">
             <button class="secondary-button" id="review-save" type="button">Save changes</button>
             <button class="secondary-button" id="review-archive" type="button">Archive</button>
+            <button class="secondary-button" id="review-publish" type="button">Publish to Git</button>
             <button id="review-approve" type="button">Approve</button>
           </div>
         </div>
@@ -416,6 +417,7 @@
     const reviewSave = document.querySelector("#review-save");
     const reviewApprove = document.querySelector("#review-approve");
     const reviewArchive = document.querySelector("#review-archive");
+    const reviewPublish = document.querySelector("#review-publish");
     const categoryForm = document.querySelector("#category-form");
     const categoryName = document.querySelector("#category-name");
     const categoryPath = document.querySelector("#category-path");
@@ -571,6 +573,7 @@
       reviewSave.hidden = ["approved", "archived"].includes(selectedItem.status);
       reviewApprove.hidden = selectedItem.status !== "review";
       reviewArchive.hidden = !["inbox", "draft", "review", "error"].includes(selectedItem.status);
+      reviewPublish.hidden = selectedItem.status !== "approved";
       reviewMessage.textContent = `Status: ${selectedItem.status}`;
       reviewView.hidden = false;
     }
@@ -637,6 +640,24 @@
       try {
         await updateSelectedItem({ status: "archived" });
         reviewMessage.textContent = "Archived. The capture remains available in Inbox history.";
+      } catch (error) {
+        reviewMessage.textContent = error.message;
+      }
+    });
+
+    reviewPublish.addEventListener("click", async () => {
+      if (!selectedItem) return;
+      reviewMessage.textContent = "Publishing...";
+      try {
+        const response = await fetch(
+          `/api/items/${encodeURIComponent(selectedItem.id)}/publish`,
+          { method: "POST", credentials: "same-origin" },
+        );
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Could not publish the item");
+        await openReview(selectedItem.id);
+        await loadItems();
+        reviewMessage.textContent = `Published in commit ${body.commit_sha}.`;
       } catch (error) {
         reviewMessage.textContent = error.message;
       }

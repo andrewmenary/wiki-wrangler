@@ -96,6 +96,7 @@ configuration, while partial items are intentionally called out in the notes.
 - [ ] Publication records and commit links
   - [x] Publication and audit schema foundation
   - [x] Publish API persists commit and resolved path metadata
+  - [x] Approved review exposes Publish to Git and commit feedback
 - [ ] Audit log
   - [x] Authenticated item edit and approval events recorded
   - [x] Administrator audit feed API and workspace viewer

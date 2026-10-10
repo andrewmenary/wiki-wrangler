@@ -159,6 +159,11 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
     },
   });
   expect(registration.status()).toBe(201);
+  await page.route("**/api/items/*/publish", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ status: "published", commit_sha: "browser-commit" }),
+  }));
 
   const category = await page.request.post("/api/categories", {
     data: { name: "Runbooks", path: `test-${unique}-runbooks` },
@@ -211,6 +216,9 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   await expect(page.getByRole("button", { name: "Approve" })).toBeVisible();
   await page.getByRole("button", { name: "Approve" }).click();
   await expect(page.locator("#review-message")).toHaveText("Approved for publishing.");
+  await expect(page.getByRole("button", { name: "Publish to Git" })).toBeVisible();
+  await page.getByRole("button", { name: "Publish to Git" }).click();
+  await expect(page.locator("#review-message")).toHaveText("Published in commit browser-commit.");
   const renamedItem = page.locator(".item").filter({ hasText: "Service restart runbook v2" });
   await expect(renamedItem).toContainText("approved");
 
