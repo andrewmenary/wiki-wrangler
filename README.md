@@ -53,3 +53,26 @@ To stop the application, press `Ctrl+C` in the Compose terminal. The SQLite data
 and captured files remain in the `wiki-wrangler-data` Docker volume. Do not use
 `docker compose down -v` unless you intend to delete that data.
 
+## Browser Tests
+
+With Node.js installed, install the test dependencies from the repository root:
+
+```powershell
+npm ci
+npx playwright install chromium
+```
+
+Run Playwright against the disposable test stack:
+
+```powershell
+docker compose -f deploy/docker-compose.test.yml up -d --build --wait
+npm run test:ui
+docker compose -f deploy/docker-compose.test.yml down
+```
+
+The test UI uses `http://127.0.0.1:8081`. Its database and attachments are stored in
+temporary container memory, not the normal application's `wiki-wrangler-data` volume.
+Stopping the test containers discards their data. The normal app on port 8080 can
+remain running while browser tests run. Tests also run against this isolated stack
+in GitHub Actions.
+

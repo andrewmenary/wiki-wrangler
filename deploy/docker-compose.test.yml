@@ -1,0 +1,31 @@
+name: wiki-wrangler-tests
+
+services:
+  api:
+    image: wiki-wrangler-api:latest
+    build:
+      context: ../backend
+    environment:
+      WIKI_WRANGLER_STORAGE_PATH: /data/storage
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  web:
+    image: wiki-wrangler-web:latest
+    build:
+      context: ../web
+    ports:
+      - "127.0.0.1:8081:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
