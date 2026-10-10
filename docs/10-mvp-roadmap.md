@@ -54,8 +54,9 @@ entirely in the UI, including edits.
 - Publish Worker: clone/pull, resolve the item's category-relative path beneath the
   configured curated root, write raw and curated files with front matter, commit with
   a generated message, and push.
-- A single item has one category assignment but may be explicitly published to more
-  than one configured repository; categories do not implicitly select repositories.
+- A single item has one category assignment and one publication destination in the MVP.
+  To send the same knowledge to another repository, re-import it as a separate item;
+  categories do not implicitly select repositories.
 - Publication record + traceability link shown in the UI (commit link).
 - Audit log (capture/approve/publish events) viewable by Admins.
 

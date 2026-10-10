@@ -160,7 +160,7 @@ CREATE TABLE publications (
     pr_url          TEXT,
     published_at    TEXT NOT NULL DEFAULT (datetime('now')),
     published_by    TEXT REFERENCES users(id),
-    UNIQUE (item_id, repository_id)
+    UNIQUE (item_id),                                -- one MVP destination per item
 );
 
 -- Audit

@@ -12,7 +12,10 @@ configuration, while partial items are intentionally called out in the notes.
   hyphenated slug convention, with a generated suggestion and validated override.
 - Repository roots default to `raw/` and `curated/` but are configurable per repository.
 - Category assignment and repository destination are separate. An item has one category
-  but may be explicitly published to multiple repositories.
+  and one MVP publication destination; re-importing creates a separate item for another
+  repository.
+- Future enhancement: clone an existing item while preserving its source relationship,
+  then independently edit its category and publication destination.
 - Published records retain the resolved raw and curated paths used at publication time.
 
 ## Phase 0 - Foundations

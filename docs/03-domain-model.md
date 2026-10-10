@@ -182,9 +182,10 @@ independent of folder-based categorization.
 
 ### Publication
 The record of an Item actually being committed/pushed (and optionally PR'd) to a
-Repository. One Item has at most one active Publication per Repository; republishing
-after an edit creates a new commit but updates the same Publication record (keeping
-`commit_sha` as the latest).
+Repository. In the MVP, one Item has one Publication and therefore one destination;
+republishing after an edit creates a new commit but updates the same Publication record
+(keeping `commit_sha` as the latest). To publish the same knowledge to another
+repository, the source is re-imported as a separate Item and reviewed independently.
 
 ### Repository
 A configured Git target (remote URL, default branch, publish mode, credential, and raw
@@ -192,9 +193,10 @@ and curated root folder names). Roots default to `raw` and `curated`, and are re
 per repository. Wiki Wrangler can be configured with more than one Repository (e.g. a
 work KB and a personal KB), though MVP ships with a single default repository.
 
-An Item has one category assignment, but it may have an intentional Publication for
-more than one Repository. Category assignment and repository destination are separate
-decisions; multiple categories do not implicitly publish an item to multiple repos.
+An Item has one category assignment and one publication destination in the MVP.
+Category assignment and repository destination are separate decisions; multiple
+categories do not implicitly publish an item to multiple repos. Re-importing the same
+source creates a separate Item when another repository destination is needed.
 
 ### AuditEvent
 An immutable log row for any state-changing action (capture, edit, approve, reject,
