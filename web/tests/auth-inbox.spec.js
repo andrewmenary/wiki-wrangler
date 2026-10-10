@@ -90,3 +90,65 @@ test("categories can be created, listed, edited, and deleted", async ({ page }) 
   await expect(page.locator("#category-message")).toHaveText("Category deleted.");
   await expect(editedRow).toHaveCount(0);
 });
+
+test("a capture can be reviewed with metadata and approved", async ({ page }) => {
+  const unique = Date.now();
+  const registration = await page.request.post("/api/auth/register", {
+    data: {
+      display_name: "Review Test User",
+      email: `review-${unique}@example.com`,
+      password: "password123",
+    },
+  });
+  expect(registration.status()).toBe(201);
+
+  const category = await page.request.post("/api/categories", {
+    data: { name: "Runbooks", path: `test-${unique}/runbooks` },
+  });
+  expect(category.status()).toBe(201);
+  const categoryBody = await category.json();
+
+  const upload = await page.request.post("/api/items/upload", {
+    multipart: {
+      file: {
+        name: "runbook.txt",
+        mimeType: "text/plain",
+        buffer: Buffer.from("Restart the service after changing configuration."),
+      },
+      title: "Service restart runbook",
+    },
+  });
+  expect(upload.status()).toBe(201);
+  const uploadBody = await upload.json();
+
+  const conversion = await page.request.post(`/api/items/${uploadBody.id}/convert`);
+  expect(conversion.status()).toBe(200);
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  const item = page.locator(".item").filter({ hasText: "Service restart runbook" });
+  await expect(item).toBeVisible();
+  await item.getByRole("button").click();
+
+  await expect(page.locator("#review-title")).toHaveText("Service restart runbook");
+  await page.getByLabel("Summary").fill("Steps for restarting the service.");
+  await page.getByLabel("Tags").fill("operations, runbook, operations");
+  await page.getByLabel("Category").selectOption(categoryBody.id);
+  await page.getByLabel("Markdown draft").fill("# Restart the service\n\nFollow the maintenance window.");
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  await expect(page.locator("#review-message")).toHaveText("Changes saved.");
+  await expect(page.getByRole("button", { name: "Approve" })).toBeVisible();
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.locator("#review-message")).toHaveText("Approved for publishing.");
+  await expect(item).toContainText("approved");
+
+  const detail = await page.request.get(`/api/items/${uploadBody.id}`);
+  expect(detail.status()).toBe(200);
+  const detailBody = await detail.json();
+  expect(detailBody.status).toBe("approved");
+  expect(detailBody.summary).toBe("Steps for restarting the service.");
+  expect(detailBody.tags).toEqual(["operations", "runbook"]);
+  expect(detailBody.category_id).toBe(categoryBody.id);
+  expect(detailBody.markdown_final).toBe("# Restart the service\n\nFollow the maintenance window.");
+});
