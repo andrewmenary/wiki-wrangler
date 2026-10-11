@@ -22,6 +22,10 @@ configuration, while partial items are intentionally called out in the notes.
   attributed through publication and audit metadata.
 - Git commit name and email are supplied through deployment environment configuration;
   no publishing email is stored in source code.
+- Public-repository publishing is a separate security boundary: repositories and items
+  will need visibility/classification controls, public publishing must be explicit, raw
+  binaries and private source URLs must be excluded, and private repositories remain
+  the safe default until those controls are implemented.
 - Published records retain the resolved raw and curated paths used at publication time.
 
 ## Phase 0 - Foundations
