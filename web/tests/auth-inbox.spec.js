@@ -174,7 +174,7 @@ test("a capture can be reviewed with metadata and approved", async ({ page }) =>
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
   await page.getByLabel("Capture title").fill("Service restart runbook");
-  await page.getByLabel("Upload a Markdown or text file").setInputFiles({
+  await page.getByLabel("Upload a document").setInputFiles({
     name: "runbook.txt",
     mimeType: "text/plain",
     buffer: Buffer.from("Restart the service after changing configuration."),

@@ -62,7 +62,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Response size limit
 - [ ] Production conversion pipeline
   - [x] Built-in Markdown, plain-text, and CSV conversion
-  - [ ] MarkItDown integration
+  - [x] MarkItDown integration for Office and PDF formats
   - [ ] Pandoc cleanup pass
   - [ ] Docling PDF/OCR path
   - [ ] Async conversion worker

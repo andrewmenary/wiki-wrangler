@@ -731,20 +731,20 @@ async def test_invalid_item_transition_is_rejected(
     assert response.status_code == 409
 
 
-async def test_unsupported_conversion_marks_item_as_error(
+async def test_pdf_upload_can_be_converted_by_markitdown(
     authenticated_client: httpx.AsyncClient,
 ) -> None:
     upload = await authenticated_client.post(
         "/api/items/upload",
-        files={"file": ("notes.pdf", b"not supported yet", "application/pdf")},
+        files={"file": ("notes.pdf", b"PDF text content", "application/pdf")},
     )
     item_id = upload.json()["id"]
 
     response = await authenticated_client.post(f"/api/items/{item_id}/convert")
 
-    assert response.status_code == 422
+    assert response.status_code == 200
     detail = await authenticated_client.get(f"/api/items/{item_id}")
-    assert detail.json()["status"] == "error"
+    assert detail.json()["status"] == "draft"
 
 
 async def test_url_capture_extracts_text_and_preserves_source(
