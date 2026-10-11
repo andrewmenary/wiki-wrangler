@@ -1138,6 +1138,23 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 f"Publish {item['title']}",
             )
         except Exception as error:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO audit_events (id, item_id, user_id, action, details_json)
+                        VALUES (:id, :item_id, :user_id, 'item.publish_failed', :details_json)
+                        """
+                    ),
+                    {
+                        "id": str(uuid4()),
+                        "item_id": item_id,
+                        "user_id": user["id"],
+                        "details_json": json.dumps(
+                            {"repository_id": preview["repository_id"], "error": str(error)}
+                        ),
+                    },
+                )
             raise HTTPException(status_code=502, detail=f"Git publish failed: {error}") from error
 
         publication_id = str(uuid4())

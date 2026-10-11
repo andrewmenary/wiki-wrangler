@@ -155,6 +155,27 @@ def _persist_job_status(
                     "error_message": error_message,
                 },
             )
+            if status is PublishJobStatus.FAILED and job.item_id:
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO audit_events (id, item_id, user_id, action, details_json)
+                        VALUES (:id, :item_id, :user_id, 'item.publish_failed', :details_json)
+                        """
+                    ),
+                    {
+                        "id": str(uuid4()),
+                        "item_id": job.item_id,
+                        "user_id": job.published_by,
+                        "details_json": json.dumps(
+                            {
+                                "repository_id": job.repository_id,
+                                "job_id": job.id,
+                                "error": error_message,
+                            }
+                        ),
+                    },
+                )
     finally:
         engine.dispose()
 
@@ -267,14 +288,14 @@ class PublishQueue:
             self._jobs.append(job)
         return job
 
-    def _retry_or_fail(self, job: PublishJob) -> None:
+    def _retry_or_fail(self, job: PublishJob, error_message: str) -> None:
         attempts = max(self._attempts.get(job.id, 0), job.attempts)
         self._attempts[job.id] = attempts
         job.attempts = attempts
         if attempts <= job.max_retries:
             self._statuses[job.id] = PublishJobStatus.QUEUED
             _persist_job_status(
-                job, PublishJobStatus.QUEUED, error_message="Publish attempt failed"
+                job, PublishJobStatus.QUEUED, error_message=error_message
             )
             if self._client is not None:
                 self._client.rpush(self._queue_name, json.dumps(job.to_dict()))
@@ -283,7 +304,7 @@ class PublishQueue:
                     self._jobs.append(job)
             return
         self._statuses[job.id] = PublishJobStatus.FAILED
-        _persist_job_status(job, PublishJobStatus.FAILED, error_message="Publish attempt failed")
+        _persist_job_status(job, PublishJobStatus.FAILED, error_message=error_message)
 
     def _mark_running(self, job: PublishJob) -> None:
         job.attempts = max(self._attempts.get(job.id, 0), job.attempts) + 1
@@ -307,8 +328,8 @@ class PublishQueue:
             self._mark_running(job)
             try:
                 result = job.execute(runner=self._runner)
-            except Exception:
-                self._retry_or_fail(job)
+            except Exception as error:
+                self._retry_or_fail(job, str(error))
                 raise
             self._mark_succeeded(job, result)
             return result
@@ -319,8 +340,8 @@ class PublishQueue:
         self._mark_running(job)
         try:
             result = job.execute(runner=self._runner)
-        except Exception:
-            self._retry_or_fail(job)
+        except Exception as error:
+            self._retry_or_fail(job, str(error))
             raise
         self._mark_succeeded(job, result)
         return result
@@ -334,8 +355,8 @@ class PublishQueue:
             self._mark_running(job)
             try:
                 result = await job.execute_async(runner=self._runner)
-            except Exception:
-                self._retry_or_fail(job)
+            except Exception as error:
+                self._retry_or_fail(job, str(error))
                 raise
             self._mark_succeeded(job, result)
             return result
@@ -346,8 +367,8 @@ class PublishQueue:
         self._mark_running(job)
         try:
             result = await job.execute_async(runner=self._runner)
-        except Exception:
-            self._retry_or_fail(job)
+        except Exception as error:
+            self._retry_or_fail(job, str(error))
             raise
         self._mark_succeeded(job, result)
         return result
