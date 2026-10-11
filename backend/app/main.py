@@ -162,6 +162,10 @@ def use_publish_queue() -> bool:
     return os.getenv("WIKI_WRANGLER_PUBLISH_MODE", "direct").strip().lower() == "queued"
 
 
+def use_conversion_queue() -> bool:
+    return os.getenv("WIKI_WRANGLER_CONVERSION_MODE", "direct").strip().lower() == "queued"
+
+
 def validate_repository_values(
     request: RepositoryRequest | RepositoryUpdateRequest,
 ) -> dict[str, object]:
@@ -1322,6 +1326,22 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             if attachment is None:
                 raise HTTPException(status_code=422, detail="Item has no uploaded attachment")
 
+            if use_conversion_queue():
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO conversion_runs (id, item_id, tool, status)
+                        VALUES (:id, :item_id, 'builtin-text', 'queued')
+                        """
+                    ),
+                    {"id": run_id, "item_id": item_id},
+                )
+                return {
+                    "id": item_id,
+                    "status": "queued",
+                    "conversion_run_id": run_id,
+                }
+
             connection.execute(
                 text("""
                     INSERT INTO conversion_runs (id, item_id, tool, status)
@@ -1373,6 +1393,26 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             raise HTTPException(status_code=422, detail=conversion_error)
 
         return {"id": item_id, "status": "draft", "conversion_run_id": run_id}
+
+    @app.get("/api/items/{item_id}/conversion", dependencies=[Depends(require_session)])
+    def get_conversion_status(item_id: str) -> dict[str, object]:
+        with engine.connect() as connection:
+            run = connection.execute(
+                text(
+                    """
+                    SELECT id, item_id, tool, status, error_message,
+                        started_at, finished_at
+                    FROM conversion_runs
+                    WHERE item_id = :item_id
+                    ORDER BY started_at DESC, id DESC
+                    LIMIT 1
+                    """
+                ),
+                {"item_id": item_id},
+            ).mappings().first()
+        if run is None:
+            raise HTTPException(status_code=404, detail="Conversion run not found")
+        return dict(run)
 
     @app.post(
         "/api/items/upload",

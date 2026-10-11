@@ -72,7 +72,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] MarkItDown integration for Office and PDF formats
   - [ ] Pandoc cleanup pass
   - [ ] Docling PDF/OCR path
-  - [ ] Async conversion worker
+  - [x] Async conversion worker with persisted conversion run status
 - [x] Conversion failure state for unsupported built-in formats
 - [x] Basic Inbox UI
 

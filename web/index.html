@@ -682,6 +682,20 @@
       throw new Error("Publication is still running. Check the item again shortly.");
     }
 
+    async function waitForConversion(itemId) {
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        const response = await fetch(`/api/items/${encodeURIComponent(itemId)}/conversion`, {
+          credentials: "same-origin",
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Could not read conversion status");
+        if (body.status === "succeeded") return body;
+        if (body.status === "failed") throw new Error(body.error_message || "Could not convert file");
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      }
+      throw new Error("Conversion is still running. Check the Inbox again shortly.");
+    }
+
     reviewSave.addEventListener("click", async () => {
       if (!selectedItem) return;
       reviewMessage.textContent = "Saving...";
@@ -1013,6 +1027,7 @@
         });
         const convertBody = await convertResponse.json();
         if (!convertResponse.ok) throw new Error(convertBody.detail || "Could not convert file");
+        if (convertBody.status === "queued") await waitForConversion(uploadBody.id);
         fileInput.value = "";
         fileTitle.value = "";
         captureMessage.textContent = "Uploaded and converted. Added to inbox.";

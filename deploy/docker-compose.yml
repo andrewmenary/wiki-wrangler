@@ -21,6 +21,7 @@ services:
       WIKI_WRANGLER_STORAGE_PATH: /data/storage
       WIKI_WRANGLER_PUBLISH_WORKSPACE: /data/publish-workspaces
       WIKI_WRANGLER_PUBLISH_MODE: queued
+      WIKI_WRANGLER_CONVERSION_MODE: queued
       WIKI_WRANGLER_REDIS_URL: redis://redis:6379/0
       WIKI_WRANGLER_GIT_AUTHOR_NAME: ${WIKI_WRANGLER_GIT_AUTHOR_NAME:-Wiki Wrangler}
       WIKI_WRANGLER_GIT_AUTHOR_EMAIL: ${WIKI_WRANGLER_GIT_AUTHOR_EMAIL:-wiki-wrangler@localhost}
@@ -46,6 +47,19 @@ services:
     depends_on:
       - api
       - redis
+
+  conversion-worker:
+    image: wiki-wrangler-api:latest
+    build:
+      context: ../backend
+    command: ["python", "-m", "app.conversion_worker"]
+    environment:
+      WIKI_WRANGLER_STORAGE_PATH: /data/storage
+      WIKI_WRANGLER_CONVERSION_MODE: queued
+    volumes:
+      - wiki-wrangler-data:/data
+    depends_on:
+      - api
 
   redis:
     image: redis:7-alpine
