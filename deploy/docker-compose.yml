@@ -25,6 +25,7 @@ services:
       WIKI_WRANGLER_REDIS_URL: redis://redis:6379/0
       WIKI_WRANGLER_GIT_AUTHOR_NAME: ${WIKI_WRANGLER_GIT_AUTHOR_NAME:-Wiki Wrangler}
       WIKI_WRANGLER_GIT_AUTHOR_EMAIL: ${WIKI_WRANGLER_GIT_AUTHOR_EMAIL:-wiki-wrangler@localhost}
+      WIKI_WRANGLER_GIT_TOKEN: ${WIKI_WRANGLER_GIT_TOKEN:-}
     volumes:
       - wiki-wrangler-data:/data
     depends_on:
@@ -42,6 +43,7 @@ services:
       WIKI_WRANGLER_REDIS_URL: redis://redis:6379/0
       WIKI_WRANGLER_GIT_AUTHOR_NAME: ${WIKI_WRANGLER_GIT_AUTHOR_NAME:-Wiki Wrangler}
       WIKI_WRANGLER_GIT_AUTHOR_EMAIL: ${WIKI_WRANGLER_GIT_AUTHOR_EMAIL:-wiki-wrangler@localhost}
+      WIKI_WRANGLER_GIT_TOKEN: ${WIKI_WRANGLER_GIT_TOKEN:-}
     volumes:
       - wiki-wrangler-data:/data
     depends_on:

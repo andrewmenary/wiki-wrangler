@@ -91,3 +91,16 @@ The same values can be placed in a local `.env` file for Compose. Do not commit 
 file or any Git credentials. The actual approver remains recorded by Wiki Wrangler's
 audit and publication metadata.
 
+For an HTTPS GitHub repository, set a fine-grained personal access token before
+starting Compose:
+
+```powershell
+$env:WIKI_WRANGLER_GIT_TOKEN = "github_pat_..."
+docker compose -f deploy/docker-compose.yml up --build
+```
+
+The token is passed to Git through an environment-only authorization header and is
+not stored in SQLite or committed to the wiki. For permission-restricted web pages,
+copy the content from your authenticated browser session and use **Capture copied
+content** in the Inbox.
+

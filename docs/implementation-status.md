@@ -67,6 +67,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Content-type-aware PDF/Office preservation for deferred conversion
   - [x] Raw HTML attachment storage
   - [x] Response size limit
+  - [x] Authenticated-page paste capture fallback in the Inbox
 - [ ] Production conversion pipeline
   - [x] Built-in Markdown, plain-text, and CSV conversion
   - [x] MarkItDown integration for Office and PDF formats
@@ -95,6 +96,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Admin API for repository targets, roots, and default selection
   - [x] Repository Settings UI
   - [x] Repository visibility and raw-source publishing policy controls
+  - [x] Environment-based token authentication for HTTPS Git remotes
 - [ ] Publish worker
   - [x] Tested Git worktree publisher core for raw/curated writes and idempotent commits
   - [x] Clone/update/push orchestration core with branch-aware integration coverage

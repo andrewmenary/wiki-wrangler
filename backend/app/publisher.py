@@ -52,11 +52,23 @@ def _run_git(worktree: Path, *arguments: str) -> str:
         check=False,
         capture_output=True,
         text=True,
+        env=_git_environment(),
     )
     if result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip() or "Git command failed"
         raise PublishError(message)
     return result.stdout.strip()
+
+
+def _git_environment() -> dict[str, str] | None:
+    token = os.getenv("WIKI_WRANGLER_GIT_TOKEN")
+    if not token:
+        return None
+    environment = os.environ.copy()
+    environment["GIT_CONFIG_COUNT"] = "1"
+    environment["GIT_CONFIG_KEY_0"] = "http.extraheader"
+    environment["GIT_CONFIG_VALUE_0"] = f"Authorization: Bearer {token}"
+    return environment
 
 
 def _safe_target(worktree: Path, relative_path: str) -> Path:
@@ -97,6 +109,7 @@ def publish_worktree(
     staged_check = subprocess.run(
         ["git", "-C", str(worktree), "diff", "--cached", "--quiet"],
         check=False,
+        env=_git_environment(),
     )
     if staged_check.returncode == 0:
         return PublishResult(_run_git(worktree, "rev-parse", "HEAD"), changed=False)
@@ -128,6 +141,7 @@ def _clone_or_update_worktree(remote_url: str, workspace: Path, branch: str) -> 
             check=False,
             capture_output=True,
             text=True,
+            env=_git_environment(),
         )
         if result.returncode != 0:
             message = result.stderr.strip() or result.stdout.strip() or "Git clone failed"

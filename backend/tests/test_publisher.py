@@ -11,6 +11,17 @@ def initialize_git_repository(path):
     )
 
 
+def test_git_environment_uses_token_without_exposing_it_in_git_arguments(monkeypatch) -> None:
+    monkeypatch.setenv("WIKI_WRANGLER_GIT_TOKEN", "test-token")
+
+    from app.publisher import _git_environment
+
+    environment = _git_environment()
+
+    assert environment["GIT_CONFIG_KEY_0"] == "http.extraheader"
+    assert environment["GIT_CONFIG_VALUE_0"] == "Authorization: Bearer test-token"
+
+
 def test_build_curated_document_includes_provenance() -> None:
     document = build_curated_document(
         "Service Guide",

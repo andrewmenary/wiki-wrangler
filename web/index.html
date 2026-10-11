@@ -245,6 +245,21 @@
           </label>
           <button type="submit">Add to inbox</button>
         </form>
+        <form class="capture-form" id="paste-form">
+          <label>
+            Capture copied content
+            <textarea id="paste-content" rows="5" placeholder="Paste content from a page you can access"></textarea>
+          </label>
+          <label>
+            Paste title
+            <input id="paste-title" type="text" placeholder="Title for this note" required>
+          </label>
+          <label>
+            Source URL (optional)
+            <input id="paste-source" type="url" placeholder="https://internal.example/page">
+          </label>
+          <button type="submit">Add pasted note</button>
+        </form>
         <form class="capture-form" id="upload-form">
           <label>
             Upload a document
@@ -423,6 +438,10 @@
     const itemList = document.querySelector("#item-list");
     const urlForm = document.querySelector("#url-form");
     const urlInput = document.querySelector("#url-input");
+    const pasteForm = document.querySelector("#paste-form");
+    const pasteContent = document.querySelector("#paste-content");
+    const pasteTitle = document.querySelector("#paste-title");
+    const pasteSource = document.querySelector("#paste-source");
     const uploadForm = document.querySelector("#upload-form");
     const fileInput = document.querySelector("#file-input");
     const fileTitle = document.querySelector("#file-title");
@@ -1002,6 +1021,31 @@
         if (!response.ok) throw new Error(body.detail || "Could not capture URL");
         urlInput.value = "";
         captureMessage.textContent = "Added to inbox.";
+        await loadItems();
+      } catch (error) {
+        captureMessage.textContent = error.message;
+      }
+    });
+
+    pasteForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      captureMessage.textContent = "Adding pasted note...";
+      try {
+        const response = await fetch("/api/items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            title: pasteTitle.value.trim(),
+            source_type: "pasted",
+            source_ref: pasteSource.value.trim() || null,
+            markdown: pasteContent.value,
+          }),
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Could not add pasted note");
+        pasteForm.reset();
+        captureMessage.textContent = "Pasted note added to inbox.";
         await loadItems();
       } catch (error) {
         captureMessage.textContent = error.message;
