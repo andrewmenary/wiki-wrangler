@@ -349,7 +349,10 @@ async def test_approved_item_can_be_published_and_recorded(
     failed = await authenticated_client.post(f"/api/items/{item_id}/publish")
     assert failed.status_code == 502
     failed_audit = await authenticated_client.get(f"/api/audit?item_id={item_id}")
-    assert any(event["action"] == "item.publish_failed" for event in failed_audit.json())
+    failure_event = next(
+        event for event in failed_audit.json() if event["action"] == "item.publish_failed"
+    )
+    assert failure_event["details"]["error"] == "remote unavailable"
     detail = await authenticated_client.get(f"/api/items/{item_id}")
     assert detail.json()["status"] == "approved"
 

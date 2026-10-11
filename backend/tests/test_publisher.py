@@ -19,7 +19,9 @@ def test_git_environment_uses_token_without_exposing_it_in_git_arguments(monkeyp
     environment = _git_environment()
 
     assert environment["GIT_CONFIG_KEY_0"] == "http.extraheader"
-    assert environment["GIT_CONFIG_VALUE_0"] == "Authorization: Bearer test-token"
+    assert environment["GIT_CONFIG_VALUE_0"] == (
+        "Authorization: Basic eC1hY2Nlc3MtdG9rZW46dGVzdC10b2tlbg=="
+    )
 
 
 def test_build_curated_document_includes_provenance() -> None:

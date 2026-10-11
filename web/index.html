@@ -593,7 +593,7 @@
       if (!response.ok) throw new Error("Could not load audit events");
       const events = await response.json();
       auditList.innerHTML = events.length
-        ? events.map((event) => `<div class="audit-row"><strong>${escapeHtml(event.action)}</strong><span>${escapeHtml(event.item_title || "System event")}</span><small>${escapeHtml(event.user_display_name || "Unknown user")} · ${escapeHtml(event.occurred_at)}</small></div>`).join("")
+        ? events.map((event) => `<div class="audit-row"><strong>${escapeHtml(event.action)}</strong><span>${escapeHtml(event.item_title || "System event")}</span><small>${escapeHtml(event.user_display_name || "Unknown user")} · ${escapeHtml(event.occurred_at)}</small>${event.details?.error ? `<small>Error: ${escapeHtml(event.details.error)}</small>` : ""}</div>`).join("")
         : '<p class="empty">No audit events yet.</p>';
     }
 

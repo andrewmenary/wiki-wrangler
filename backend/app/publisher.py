@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import subprocess
@@ -67,7 +68,8 @@ def _git_environment() -> dict[str, str] | None:
     environment = os.environ.copy()
     environment["GIT_CONFIG_COUNT"] = "1"
     environment["GIT_CONFIG_KEY_0"] = "http.extraheader"
-    environment["GIT_CONFIG_VALUE_0"] = f"Authorization: Bearer {token}"
+    credentials = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    environment["GIT_CONFIG_VALUE_0"] = f"Authorization: Basic {credentials}"
     return environment
 
 
