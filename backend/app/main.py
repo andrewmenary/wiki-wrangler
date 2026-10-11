@@ -269,6 +269,21 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     "expires_at": expires_at.isoformat(),
                 },
             )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (id, user_id, action, details_json)
+                    VALUES (:id, :user_id, 'user.created', :details_json)
+                    """
+                ),
+                {
+                    "id": str(uuid4()),
+                    "user_id": user_id,
+                    "details_json": json.dumps(
+                        {"role": role, "email": email}
+                    ),
+                },
+            )
         response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=43200)
         return {"id": user_id, "display_name": display_name, "email": email, "role": role}
 

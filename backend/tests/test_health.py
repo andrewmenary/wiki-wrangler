@@ -79,6 +79,10 @@ async def test_first_user_can_register_and_use_session_cookie(client: httpx.Asyn
     assert current_user.status_code == 200
     assert current_user.json()["email"] == "admin@example.com"
 
+    audit = await client.get("/api/audit")
+    assert audit.status_code == 200
+    assert any(event["action"] == "user.created" for event in audit.json())
+
     logout = await client.post("/api/auth/logout")
     assert logout.status_code == 204
     assert (await client.get("/api/auth/me")).status_code == 401
