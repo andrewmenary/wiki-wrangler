@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import inspect
 import json
 import os
 import time
@@ -74,7 +76,7 @@ class PublishJob:
 
     def execute(self, runner: JobRunner | None = None) -> PublishResult:
         callback = runner or self.runner or publish_remote
-        return callback(
+        result = callback(
             remote_url=self.remote_url,
             workspace=self.workspace,
             branch=self.branch,
@@ -84,6 +86,25 @@ class PublishJob:
             curated_markdown=self.curated_markdown,
             commit_message=self.commit_message,
         )
+        if inspect.isawaitable(result):
+            raise TypeError("Use execute_async for coroutine-based runners")
+        return result
+
+    async def execute_async(self, runner: JobRunner | None = None) -> PublishResult:
+        callback = runner or self.runner or publish_remote
+        result = callback(
+            remote_url=self.remote_url,
+            workspace=self.workspace,
+            branch=self.branch,
+            raw_source=self.raw_source,
+            raw_path=self.raw_path,
+            curated_path=self.curated_path,
+            curated_markdown=self.curated_markdown,
+            commit_message=self.commit_message,
+        )
+        if inspect.isawaitable(result):
+            return await result
+        return result
 
 
 class PublishQueue:
@@ -150,6 +171,33 @@ class PublishQueue:
         self._statuses[job.id] = PublishJobStatus.RUNNING
         try:
             result = job.execute(runner=self._runner)
+        except Exception:
+            self._statuses[job.id] = PublishJobStatus.FAILED
+            raise
+        self._statuses[job.id] = PublishJobStatus.SUCCEEDED
+        return result
+
+    async def run_next_async(self) -> PublishResult:
+        if self._client is not None:
+            payload = self._client.lpop(self._queue_name)
+            if payload is None:
+                raise RuntimeError("No publish jobs are queued")
+            job = PublishJob.from_dict(json.loads(payload))
+            self._statuses[job.id] = PublishJobStatus.RUNNING
+            try:
+                result = await job.execute_async(runner=self._runner)
+            except Exception:
+                self._statuses[job.id] = PublishJobStatus.FAILED
+                raise
+            self._statuses[job.id] = PublishJobStatus.SUCCEEDED
+            return result
+        with self._lock:
+            if not self._jobs:
+                raise RuntimeError("No publish jobs are queued")
+            job = self._jobs.popleft()
+        self._statuses[job.id] = PublishJobStatus.RUNNING
+        try:
+            result = await job.execute_async(runner=self._runner)
         except Exception:
             self._statuses[job.id] = PublishJobStatus.FAILED
             raise
@@ -227,6 +275,35 @@ def start_publish_worker(
             processed += 1
         except RuntimeError:
             time.sleep(poll_interval)
+            continue
+
+        if max_jobs is not None and processed >= max_jobs:
+            return results
+
+
+async def async_start_publish_worker(
+    queue: PublishQueue | None = None,
+    *,
+    poll_interval: float = 1.0,
+    max_jobs: int | None = None,
+) -> list[PublishResult]:
+    """Async worker loop that can execute both sync and coroutine-based job runners."""
+    target_queue = queue or DEFAULT_PUBLISH_QUEUE
+    results: list[PublishResult] = []
+    processed = 0
+
+    while True:
+        if target_queue.pending_count == 0:
+            if max_jobs is None or processed >= max_jobs:
+                return results
+            await asyncio.sleep(poll_interval)
+            continue
+
+        try:
+            results.append(await target_queue.run_next_async())
+            processed += 1
+        except RuntimeError:
+            await asyncio.sleep(poll_interval)
             continue
 
         if max_jobs is not None and processed >= max_jobs:

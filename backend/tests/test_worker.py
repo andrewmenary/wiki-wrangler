@@ -1,7 +1,14 @@
+import asyncio
 from pathlib import Path
 
 from app.publisher import PublishResult
-from app.worker import PublishJob, PublishJobStatus, PublishQueue, start_publish_worker
+from app.worker import (
+    PublishJob,
+    PublishJobStatus,
+    PublishQueue,
+    async_start_publish_worker,
+    start_publish_worker,
+)
 
 
 def test_publish_queue_executes_enqueued_jobs() -> None:
@@ -120,3 +127,30 @@ def test_publish_queue_uses_redis_client_when_present() -> None:
     assert result.commit_sha == "redis123"
     assert queue.pending_count == 0
     assert queue.get_status("job-redis") == PublishJobStatus.SUCCEEDED
+
+
+def test_async_start_publish_worker_runs_jobs_in_asyncio() -> None:
+    async def fake_async_runner(*, remote_url: str, workspace: Path, branch: str, **kwargs):
+        await asyncio.sleep(0)
+        return PublishResult(commit_sha="async123", changed=True)
+
+    queue = PublishQueue(runner=fake_async_runner)
+    queue.enqueue(
+        PublishJob(
+            id="job-async",
+            remote_url="https://github.com/example/wiki.git",
+            workspace=Path("/tmp/async-workspace"),
+            branch="main",
+            raw_source=None,
+            raw_path=None,
+            curated_path="curated/async.md",
+            curated_markdown="# Async\n",
+            commit_message="Publish async notes",
+        )
+    )
+
+    results = asyncio.run(async_start_publish_worker(queue, poll_interval=0.0, max_jobs=1))
+
+    assert len(results) == 1
+    assert results[0].commit_sha == "async123"
+    assert queue.get_status("job-async") == PublishJobStatus.SUCCEEDED
