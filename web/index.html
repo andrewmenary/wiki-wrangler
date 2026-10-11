@@ -289,6 +289,13 @@
                 <option value="">Uncategorized</option>
               </select>
             </label>
+            <label>
+              Publication visibility
+              <select id="review-visibility">
+                <option value="private">Private</option>
+                <option value="public">Public</option>
+              </select>
+            </label>
           </div>
           <label>
             Generated Markdown (conversion output)
@@ -431,6 +438,7 @@
     const reviewSummary = document.querySelector("#review-summary");
     const reviewTags = document.querySelector("#review-tags");
     const reviewCategory = document.querySelector("#review-category");
+    const reviewVisibility = document.querySelector("#review-visibility");
     const reviewMarkdown = document.querySelector("#review-markdown");
     const markdownSourceMode = document.querySelector("#markdown-source-mode");
     const markdownPreviewMode = document.querySelector("#markdown-preview-mode");
@@ -630,6 +638,7 @@
       reviewSummary.value = selectedItem.summary || "";
       reviewTags.value = (selectedItem.tags || []).join(", ");
       reviewCategory.value = selectedItem.category_id || "";
+      reviewVisibility.value = selectedItem.visibility || "private";
       reviewMarkdown.value = selectedItem.markdown_final || selectedItem.markdown_generated || "";
       setMarkdownMode(false);
       reviewSave.hidden = ["approved", "published", "archived"].includes(selectedItem.status);
@@ -668,6 +677,7 @@
           summary: reviewSummary.value,
           tags: reviewTags.value.split(",").map((tag) => tag.trim()).filter(Boolean),
           category_id: reviewCategory.value || null,
+          visibility: reviewVisibility.value,
           markdown_final: reviewMarkdown.value
         };
         if (selectedItem.status === "draft") fields.status = "review";
@@ -687,6 +697,7 @@
           summary: reviewSummary.value,
           tags: reviewTags.value.split(",").map((tag) => tag.trim()).filter(Boolean),
           category_id: reviewCategory.value || null,
+          visibility: reviewVisibility.value,
           markdown_final: reviewMarkdown.value,
           status: "approved"
         });

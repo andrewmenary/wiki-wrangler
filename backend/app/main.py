@@ -822,7 +822,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     """
                     SELECT items.id, items.submission_id, items.title, items.status,
                         items.markdown_generated, items.markdown_final,
-                        items.summary, items.tags_json, items.category_id,
+                        items.summary, items.tags_json, items.category_id, items.visibility,
                         categories.name AS category_name, categories.path AS category_path,
                         items.created_at,
                         source_submissions.source_type, source_submissions.source_ref,
