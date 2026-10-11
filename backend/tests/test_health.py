@@ -238,6 +238,12 @@ async def test_admin_can_manage_repository_configuration(
     deleted = await authenticated_client.delete(f"/api/repositories/{secondary.json()['id']}")
     assert deleted.status_code == 204
 
+    audit = await authenticated_client.get("/api/audit")
+    actions = [event["action"] for event in audit.json()]
+    assert "repository.created" in actions
+    assert "repository.updated" in actions
+    assert "repository.deleted" in actions
+
 
 async def test_approved_item_resolves_repository_publication_paths(
     authenticated_client: httpx.AsyncClient,

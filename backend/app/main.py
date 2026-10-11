@@ -566,7 +566,10 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         return [dict(row) for row in rows]
 
     @app.post("/api/repositories", status_code=201, dependencies=[Depends(require_admin)])
-    def create_repository(request: RepositoryRequest) -> dict[str, object]:
+    def create_repository(
+        request: RepositoryRequest,
+        user: dict[str, object] = Depends(current_user),
+    ) -> dict[str, object]:
         values = validate_repository_values(request)
         repository_id = str(uuid4())
         with engine.begin() as connection:
@@ -590,11 +593,34 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             row = connection.execute(
                 text("SELECT * FROM repositories WHERE id = :id"), {"id": repository_id}
             ).mappings().one()
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (id, user_id, action, details_json)
+                    VALUES (:id, :user_id, 'repository.created', :details_json)
+                    """
+                ),
+                {
+                    "id": str(uuid4()),
+                    "user_id": user["id"],
+                    "details_json": json.dumps(
+                        {
+                            "repository_id": repository_id,
+                            "name": values["name"],
+                            "remote_url": values["remote_url"],
+                            "publish_mode": values["publish_mode"],
+                            "visibility": values["visibility"],
+                        }
+                    ),
+                },
+            )
         return dict(row)
 
     @app.patch("/api/repositories/{repository_id}", dependencies=[Depends(require_admin)])
     def update_repository(
-        repository_id: str, request: RepositoryUpdateRequest
+        repository_id: str,
+        request: RepositoryUpdateRequest,
+        user: dict[str, object] = Depends(current_user),
     ) -> dict[str, object]:
         if not request.model_fields_set:
             raise HTTPException(status_code=422, detail="At least one repository field is required")
@@ -615,6 +641,21 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             row = connection.execute(
                 text("SELECT * FROM repositories WHERE id = :id"), {"id": repository_id}
             ).mappings().one()
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (id, user_id, action, details_json)
+                    VALUES (:id, :user_id, 'repository.updated', :details_json)
+                    """
+                ),
+                {
+                    "id": str(uuid4()),
+                    "user_id": user["id"],
+                    "details_json": json.dumps(
+                        {"repository_id": repository_id, "fields": sorted(values)}
+                    ),
+                },
+            )
         return dict(row)
 
     @app.delete(
@@ -622,20 +663,38 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         status_code=204,
         dependencies=[Depends(require_admin)],
     )
-    def delete_repository(repository_id: str) -> None:
+    def delete_repository(
+        repository_id: str,
+        user: dict[str, object] = Depends(current_user),
+    ) -> None:
         with engine.begin() as connection:
             repository = connection.execute(
-                text("SELECT is_default FROM repositories WHERE id = :id"),
+                text("SELECT id, name, is_default FROM repositories WHERE id = :id"),
                 {"id": repository_id},
             ).first()
             if repository is None:
                 raise HTTPException(status_code=404, detail="Repository not found")
-            if repository[0]:
+            if repository[2]:
                 raise HTTPException(
                     status_code=409, detail="The default repository cannot be deleted"
                 )
             connection.execute(
                 text("DELETE FROM repositories WHERE id = :id"), {"id": repository_id}
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (id, user_id, action, details_json)
+                    VALUES (:id, :user_id, 'repository.deleted', :details_json)
+                    """
+                ),
+                {
+                    "id": str(uuid4()),
+                    "user_id": user["id"],
+                    "details_json": json.dumps(
+                        {"repository_id": repository_id, "name": repository[1]}
+                    ),
+                },
             )
 
     @app.get("/api/audit", dependencies=[Depends(require_admin)])
