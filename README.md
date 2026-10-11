@@ -76,3 +76,18 @@ Stopping the test containers discards their data. The normal app on port 8080 ca
 remain running while browser tests run. Tests also run against this isolated stack
 in GitHub Actions.
 
+## Git Publishing Identity
+
+Git publishing uses the account configured for the target repository. The commit
+author identity is supplied at deployment time and is not stored in source code:
+
+```powershell
+$env:WIKI_WRANGLER_GIT_AUTHOR_NAME = "Wiki Wrangler"
+$env:WIKI_WRANGLER_GIT_AUTHOR_EMAIL = "your-publishing-address@example.com"
+docker compose -f deploy/docker-compose.yml up --build
+```
+
+The same values can be placed in a local `.env` file for Compose. Do not commit that
+file or any Git credentials. The actual approver remains recorded by Wiki Wrangler's
+audit and publication metadata.
+
