@@ -157,7 +157,15 @@ larger document conversions are involved.
 - **AI Service** — abstracted behind an internal interface so the backing LLM provider
   (local model via Ollama/vLLM, or a hosted API) is swappable via configuration.
 
-### 3.7 Data Stores
+### 3.7 Curated Markdown Contract
+Curated documents begin with YAML front matter so downstream wiki ingestion can use
+structured metadata without parsing the prose body. The publisher emits `title`,
+`summary`, `tags`, `category`, and `visibility`, plus either a private `source` and
+`raw_path` or the redacted public publication equivalents. Metadata is serialized with
+JSON-compatible scalar and array values, which are valid YAML and avoid ambiguous tag
+parsing. Public repository rules are applied before this block is generated.
+
+### 3.8 Data Stores
 - **SQLite** — all structured metadata: items, submissions, categories, tags,
   publications, repositories, users, audit events. Chosen per the original prompt for
   simplicity in a single-tenant self-hosted deployment; see
