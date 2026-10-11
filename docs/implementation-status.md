@@ -94,6 +94,7 @@ configuration, while partial items are intentionally called out in the notes.
 - [ ] Repository configuration
   - [x] Admin API for repository targets, roots, and default selection
   - [x] Repository Settings UI
+  - [x] Repository visibility and raw-source publishing policy controls
 - [ ] Publish worker
   - [x] Tested Git worktree publisher core for raw/curated writes and idempotent commits
   - [x] Clone/update/push orchestration core with branch-aware integration coverage

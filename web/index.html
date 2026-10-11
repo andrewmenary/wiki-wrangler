@@ -365,6 +365,17 @@
               <input id="repository-curated-root" type="text" value="curated" required>
             </label>
             <label>
+              Visibility
+              <select id="repository-visibility">
+                <option value="private">Private</option>
+                <option value="public">Public</option>
+              </select>
+            </label>
+            <label>
+              <span class="field-heading">Publish raw sources</span>
+              <input id="repository-publish-raw" type="checkbox" checked>
+            </label>
+            <label>
               <span class="field-heading">Default repository</span>
               <input id="repository-default" type="checkbox">
             </label>
@@ -445,6 +456,8 @@
     const repositoryCredential = document.querySelector("#repository-credential");
     const repositoryRawRoot = document.querySelector("#repository-raw-root");
     const repositoryCuratedRoot = document.querySelector("#repository-curated-root");
+    const repositoryVisibility = document.querySelector("#repository-visibility");
+    const repositoryPublishRaw = document.querySelector("#repository-publish-raw");
     const repositoryDefault = document.querySelector("#repository-default");
     const repositoryList = document.querySelector("#repository-list");
     const repositoryMessage = document.querySelector("#repository-message");
@@ -534,7 +547,7 @@
       if (!response.ok) throw new Error("Could not load repositories");
       repositories = await response.json();
       repositoryList.innerHTML = repositories.length
-        ? repositories.map((repository) => `<div class="repository-row"><div class="repository-label"><strong>${escapeHtml(repository.name)}${repository.is_default ? " (default)" : ""}</strong><small>${escapeHtml(repository.curated_root)} · ${escapeHtml(repository.remote_url)}</small></div><span class="repository-actions"><button type="button" data-edit-repository="${repository.id}">Edit</button><button type="button" data-delete-repository="${repository.id}">Delete</button></span></div>`).join("")
+        ? repositories.map((repository) => `<div class="repository-row"><div class="repository-label"><strong>${escapeHtml(repository.name)}${repository.is_default ? " (default)" : ""}</strong><small>${escapeHtml(repository.visibility)} · raw ${repository.publish_raw ? "on" : "off"} · ${escapeHtml(repository.curated_root)} · ${escapeHtml(repository.remote_url)}</small></div><span class="repository-actions"><button type="button" data-edit-repository="${repository.id}">Edit</button><button type="button" data-delete-repository="${repository.id}">Delete</button></span></div>`).join("")
         : '<p class="empty">No repositories configured.</p>';
     }
 
@@ -812,6 +825,8 @@
             credential_ref: repositoryCredential.value,
             raw_root: repositoryRawRoot.value,
             curated_root: repositoryCuratedRoot.value,
+            visibility: repositoryVisibility.value,
+            publish_raw: repositoryPublishRaw.checked,
             is_default: repositoryDefault.checked
           })
         });
@@ -823,6 +838,8 @@
         repositoryCredential.value = "";
         repositoryRawRoot.value = "raw";
         repositoryCuratedRoot.value = "curated";
+        repositoryVisibility.value = "private";
+        repositoryPublishRaw.checked = true;
         repositoryDefault.checked = false;
         editingRepositoryId = null;
         repositoryForm.querySelector("button[type=submit]").textContent = "Create repository";
@@ -846,6 +863,8 @@
         repositoryCredential.value = repository.credential_ref;
         repositoryRawRoot.value = repository.raw_root;
         repositoryCuratedRoot.value = repository.curated_root;
+        repositoryVisibility.value = repository.visibility;
+        repositoryPublishRaw.checked = Boolean(repository.publish_raw);
         repositoryDefault.checked = Boolean(repository.is_default);
         repositoryForm.querySelector("button[type=submit]").textContent = "Save repository";
         return;
