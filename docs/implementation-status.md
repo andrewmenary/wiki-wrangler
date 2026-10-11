@@ -61,7 +61,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Raw HTML attachment storage
   - [x] Response size limit
 - [ ] Production conversion pipeline
-  - [x] Built-in Markdown and plain-text conversion
+  - [x] Built-in Markdown, plain-text, and CSV conversion
   - [ ] MarkItDown integration
   - [ ] Pandoc cleanup pass
   - [ ] Docling PDF/OCR path

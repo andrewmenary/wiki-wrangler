@@ -499,6 +499,24 @@ async def test_text_upload_can_be_converted_to_draft(
     assert detail.json()["markdown_final"] == "# Meeting notes"
 
 
+async def test_csv_upload_can_be_converted_to_markdown_table(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    upload = await authenticated_client.post(
+        "/api/items/upload",
+        files={"file": ("inventory.csv", b"Name,Status\nWiki,Ready", "text/csv")},
+    )
+    item_id = upload.json()["id"]
+
+    response = await authenticated_client.post(f"/api/items/{item_id}/convert")
+
+    assert response.status_code == 200
+    detail = await authenticated_client.get(f"/api/items/{item_id}")
+    assert detail.json()["markdown_generated"] == (
+        "| Name | Status |\n| --- | --- |\n| Wiki | Ready |"
+    )
+
+
 async def test_item_can_be_reviewed_edited_and_approved(
     authenticated_client: httpx.AsyncClient,
     tmp_path,
@@ -718,7 +736,7 @@ async def test_unsupported_conversion_marks_item_as_error(
 ) -> None:
     upload = await authenticated_client.post(
         "/api/items/upload",
-        files={"file": ("notes.csv", b"name,value\nitem,1", "text/csv")},
+        files={"file": ("notes.pdf", b"not supported yet", "application/pdf")},
     )
     item_id = upload.json()["id"]
 
