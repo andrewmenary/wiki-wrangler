@@ -115,6 +115,7 @@ test("an admin can configure repository roots", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
   await page.getByText("Manage repositories", { exact: true }).click();
+  await expect(page.getByText("Manage users", { exact: true })).toBeVisible();
   const repositoryForm = page.locator("#repository-form");
   await repositoryForm.locator("#repository-name").fill("Work Wiki");
   await repositoryForm.locator("#repository-remote").fill("https://github.com/example/work-wiki.git");
