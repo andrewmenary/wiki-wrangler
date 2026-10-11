@@ -177,6 +177,14 @@ async def test_admin_can_promote_curator_but_not_demote_last_admin(
         "/api/auth/login",
         json={"email": "curator@example.com", "password": "password123"},
     )
+    disabled = await client.patch(
+        f"/api/users/{admin_id}/status", json={"is_active": False}
+    )
+    assert disabled.status_code == 200
+    enabled = await client.patch(
+        f"/api/users/{admin_id}/status", json={"is_active": True}
+    )
+    assert enabled.status_code == 200
     last_admin = await client.patch(
         f"/api/users/{curator_id}/role", json={"role": "curator"}
     )

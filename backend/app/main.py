@@ -90,6 +90,10 @@ class UserRoleUpdateRequest(BaseModel):
     role: str
 
 
+class UserStatusUpdateRequest(BaseModel):
+    is_active: bool
+
+
 ALLOWED_UPLOAD_EXTENSIONS = {".csv", ".docx", ".md", ".pdf", ".pptx", ".txt", ".xlsx"}
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 MAX_URL_SIZE = 10 * 1024 * 1024
@@ -692,6 +696,53 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 },
             )
         return {"id": user_id, "display_name": target["display_name"], "role": request.role}
+
+    @app.patch("/api/users/{user_id}/status", dependencies=[Depends(require_admin)])
+    def update_user_status(
+        user_id: str,
+        request: UserStatusUpdateRequest,
+        admin: dict[str, object] = Depends(current_user),
+    ) -> dict[str, object]:
+        with engine.begin() as connection:
+            target = connection.execute(
+                text("SELECT id, display_name, role, is_active FROM users WHERE id = :id"),
+                {"id": user_id},
+            ).mappings().first()
+            if target is None:
+                raise HTTPException(status_code=404, detail="User not found")
+            if not request.is_active and target["role"] == "admin" and target["is_active"]:
+                admin_count = connection.execute(
+                    text("SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 1")
+                ).scalar_one()
+                if admin_count <= 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="The last administrator cannot be disabled",
+                    )
+            connection.execute(
+                text("UPDATE users SET is_active = :is_active WHERE id = :id"),
+                {"id": user_id, "is_active": int(request.is_active)},
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (id, user_id, action, details_json)
+                    VALUES (:id, :user_id, 'user.status_changed', :details_json)
+                    """
+                ),
+                {
+                    "id": str(uuid4()),
+                    "user_id": admin["id"],
+                    "details_json": json.dumps(
+                        {"target_user_id": user_id, "is_active": request.is_active}
+                    ),
+                },
+            )
+        return {
+            "id": user_id,
+            "display_name": target["display_name"],
+            "is_active": request.is_active,
+        }
 
     @app.post("/api/items", status_code=201, dependencies=[Depends(require_session)])
     def capture_item(request: CaptureRequest) -> dict[str, str]:

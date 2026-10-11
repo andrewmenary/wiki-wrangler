@@ -551,7 +551,7 @@
       const response = await fetch("/api/users", { credentials: "same-origin" });
       if (!response.ok) throw new Error("Could not load users");
       users = await response.json();
-      userList.innerHTML = users.map((user) => `<div class="user-row"><div><strong>${escapeHtml(user.display_name)}</strong><small>${escapeHtml(user.email)}</small></div><select data-user-role="${user.id}" aria-label="Role for ${escapeHtml(user.display_name)}"><option value="curator"${user.role === "curator" ? " selected" : ""}>Curator</option><option value="admin"${user.role === "admin" ? " selected" : ""}>Admin</option></select><button type="button" data-save-user="${user.id}">Save</button></div>`).join("");
+      userList.innerHTML = users.map((user) => `<div class="user-row"><div><strong>${escapeHtml(user.display_name)}</strong><small>${escapeHtml(user.email)} · ${user.is_active ? "Active" : "Disabled"}</small></div><select data-user-role="${user.id}" aria-label="Role for ${escapeHtml(user.display_name)}"><option value="curator"${user.role === "curator" ? " selected" : ""}>Curator</option><option value="admin"${user.role === "admin" ? " selected" : ""}>Admin</option></select><button type="button" data-save-user="${user.id}">Save</button><button type="button" data-toggle-user="${user.id}">${user.is_active ? "Disable" : "Enable"}</button></div>`).join("");
     }
 
     async function openReview(itemId) {
@@ -865,14 +865,17 @@
 
     userList.addEventListener("click", async (event) => {
       const saveButton = event.target.closest("[data-save-user]");
-      if (!saveButton) return;
-      const userId = saveButton.dataset.saveUser;
-      const role = userList.querySelector(`[data-user-role="${userId}"]`).value;
-      const response = await fetch(`/api/users/${encodeURIComponent(userId)}/role`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ role })
+      const toggleButton = event.target.closest("[data-toggle-user]");
+      if (!saveButton && !toggleButton) return;
+      const userId = saveButton?.dataset.saveUser || toggleButton.dataset.toggleUser;
+      const user = users.find((entry) => entry.id === userId);
+      const endpoint = saveButton ? "role" : "status";
+      const payload = saveButton
+        ? { role: userList.querySelector(`[data-user-role="${userId}"]`).value }
+        : { is_active: !user.is_active };
+      const response = await fetch(`/api/users/${encodeURIComponent(userId)}/${endpoint}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        credentials: "same-origin", body: JSON.stringify(payload)
       });
       const body = await response.json();
       userMessage.textContent = response.ok
