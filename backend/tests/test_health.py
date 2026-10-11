@@ -341,6 +341,59 @@ async def test_approved_item_can_be_published_and_recorded(
     assert any(event["action"] == "item.published" for event in audit.json())
 
 
+async def test_public_repository_requires_public_item_and_omits_raw_path(
+    authenticated_client: httpx.AsyncClient,
+    monkeypatch,
+) -> None:
+    repository = await authenticated_client.post(
+        "/api/repositories",
+        json={
+            "name": "Public Wiki",
+            "remote_url": "https://github.com/example/public-wiki.git",
+            "credential_ref": "github-public",
+            "visibility": "public",
+            "is_default": True,
+        },
+    )
+    category = await authenticated_client.post(
+        "/api/categories",
+        json={"name": "Public Notes", "path": "public-notes"},
+    )
+    item = await authenticated_client.post(
+        "/api/items",
+        json={"title": "Public Guide", "source_type": "manual", "markdown": "Content"},
+    )
+    item_id = item.json()["id"]
+    await authenticated_client.patch(
+        f"/api/items/{item_id}",
+        json={
+            "category_id": category.json()["id"],
+            "visibility": "public",
+            "status": "draft",
+        },
+    )
+    await authenticated_client.patch(
+        f"/api/items/{item_id}", json={"status": "review"}
+    )
+    await authenticated_client.patch(
+        f"/api/items/{item_id}", json={"status": "approved"}
+    )
+
+    preview = await authenticated_client.get(f"/api/items/{item_id}/publication-preview")
+
+    assert repository.status_code == 201
+    assert preview.status_code == 200
+    assert preview.json()["raw_path"] is None
+
+    def fake_publish(*args, **kwargs):
+        return PublishResult(commit_sha="public123", changed=True)
+
+    monkeypatch.setattr(main, "publish_remote", fake_publish)
+    published = await authenticated_client.post(f"/api/items/{item_id}/publish")
+    assert published.status_code == 200
+    assert published.json()["raw_path"] is None
+
+
 async def test_publish_endpoint_pushes_to_local_git_remote(
     authenticated_client: httpx.AsyncClient,
     monkeypatch,

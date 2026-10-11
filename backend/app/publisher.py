@@ -19,7 +19,7 @@ def build_curated_document(
     title: str,
     summary: str | None,
     source_ref: str | None,
-    raw_path: str,
+    raw_path: str | None,
     markdown: str,
 ) -> str:
     """Add stable provenance metadata to the curated Markdown document."""
@@ -28,9 +28,12 @@ def build_curated_document(
         f"title: {json.dumps(title)}",
         f"summary: {json.dumps(summary or '')}",
         f"source: {json.dumps(source_ref or '')}",
-        f"raw_path: {json.dumps(raw_path)}",
-        "---",
     ]
+    if raw_path:
+        front_matter.append(f"raw_path: {json.dumps(raw_path)}")
+    else:
+        front_matter.append("raw_published: false")
+    front_matter.append("---")
     return "\n".join(front_matter) + "\n\n" + markdown.rstrip() + "\n"
 
 
@@ -57,8 +60,8 @@ def _safe_target(worktree: Path, relative_path: str) -> Path:
 
 def publish_worktree(
     worktree: Path,
-    raw_source: Path,
-    raw_path: str,
+    raw_source: Path | None,
+    raw_path: str | None,
     curated_path: str,
     curated_markdown: str,
     commit_message: str,
@@ -68,17 +71,20 @@ def publish_worktree(
     """Write publication files and create an idempotent commit in a Git worktree."""
     if not worktree.is_dir() or not (worktree / ".git").exists():
         raise PublishError("Publication worktree is not a Git repository")
-    if not raw_source.is_file():
+    if raw_source is not None and not raw_source.is_file():
         raise PublishError("Raw source file is unavailable")
 
-    raw_target = _safe_target(worktree, raw_path)
+    raw_target = _safe_target(worktree, raw_path) if raw_path else None
     curated_target = _safe_target(worktree, curated_path)
-    raw_target.parent.mkdir(parents=True, exist_ok=True)
+    if raw_target is not None:
+        raw_target.parent.mkdir(parents=True, exist_ok=True)
     curated_target.parent.mkdir(parents=True, exist_ok=True)
-    raw_target.write_bytes(raw_source.read_bytes())
+    if raw_target is not None and raw_source is not None:
+        raw_target.write_bytes(raw_source.read_bytes())
     curated_target.write_text(curated_markdown, encoding="utf-8")
 
-    _run_git(worktree, "add", "--", raw_path, curated_path)
+    paths = [curated_path] + ([raw_path] if raw_path else [])
+    _run_git(worktree, "add", "--", *paths)
     staged_check = subprocess.run(
         ["git", "-C", str(worktree), "diff", "--cached", "--quiet"],
         check=False,
@@ -128,8 +134,8 @@ def publish_remote(
     remote_url: str,
     workspace: Path,
     branch: str,
-    raw_source: Path,
-    raw_path: str,
+    raw_source: Path | None,
+    raw_path: str | None,
     curated_path: str,
     curated_markdown: str,
     commit_message: str,

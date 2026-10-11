@@ -92,6 +92,20 @@ def initialize_database(engine: Engine) -> None:
                 """
             )
         )
+        repository_columns = {
+            row[1] for row in connection.execute(text("PRAGMA table_info(repositories)")).all()
+        }
+        if "visibility" not in repository_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE repositories "
+                    "ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'"
+                )
+            )
+        if "publish_raw" not in repository_columns:
+            connection.execute(
+                text("ALTER TABLE repositories ADD COLUMN publish_raw INTEGER NOT NULL DEFAULT 1")
+            )
         connection.execute(
             text(
                 """
@@ -166,6 +180,10 @@ def initialize_database(engine: Engine) -> None:
             )
         if "category_id" not in item_columns:
             connection.execute(text("ALTER TABLE items ADD COLUMN category_id TEXT"))
+        if "visibility" not in item_columns:
+            connection.execute(
+                text("ALTER TABLE items ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'")
+            )
         connection.execute(
             text(
                 """

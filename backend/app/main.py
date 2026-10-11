@@ -51,6 +51,7 @@ class ItemUpdateRequest(BaseModel):
     category_id: str | None = None
     markdown_final: str | None = None
     status: str | None = None
+    visibility: str | None = None
 
 
 class CategoryRequest(BaseModel):
@@ -74,6 +75,8 @@ class RepositoryRequest(BaseModel):
     raw_root: str = "raw"
     curated_root: str = "curated"
     is_default: bool = False
+    visibility: str = "private"
+    publish_raw: bool = True
 
 
 class RepositoryUpdateRequest(BaseModel):
@@ -85,6 +88,8 @@ class RepositoryUpdateRequest(BaseModel):
     raw_root: str | None = None
     curated_root: str | None = None
     is_default: bool | None = None
+    visibility: str | None = None
+    publish_raw: bool | None = None
 
 
 class UserRoleUpdateRequest(BaseModel):
@@ -167,6 +172,9 @@ def validate_repository_values(
             raise HTTPException(status_code=422, detail="Default branch is required")
     if "publish_mode" in values and values["publish_mode"] not in {"direct", "pull_request"}:
         raise HTTPException(status_code=422, detail="Unknown publish mode")
+    for visibility_name in ("visibility",):
+        if visibility_name in values and values[visibility_name] not in {"private", "public"}:
+            raise HTTPException(status_code=422, detail="Unknown visibility")
     if "credential_ref" in values:
         values["credential_ref"] = str(values["credential_ref"]).strip()
         if not values["credential_ref"]:
@@ -535,7 +543,8 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 text(
                     """
                     SELECT id, name, remote_url, default_branch, publish_mode,
-                        credential_ref, raw_root, curated_root, is_default, created_at
+                        credential_ref, raw_root, curated_root, is_default,
+                        visibility, publish_raw, created_at
                     FROM repositories
                     ORDER BY name
                     """
@@ -555,10 +564,12 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     """
                     INSERT INTO repositories
                         (id, name, remote_url, default_branch, publish_mode,
-                         credential_ref, raw_root, curated_root, is_default)
+                         credential_ref, raw_root, curated_root, is_default,
+                         visibility, publish_raw)
                     VALUES
                         (:id, :name, :remote_url, :default_branch, :publish_mode,
-                         :credential_ref, :raw_root, :curated_root, :is_default)
+                         :credential_ref, :raw_root, :curated_root, :is_default,
+                         :visibility, :publish_raw)
                     """
                 ),
                 {"id": repository_id, **values},
@@ -852,7 +863,8 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             item = connection.execute(
                 text(
                     """
-                    SELECT items.status, items.title, categories.path AS category_path,
+                    SELECT items.status, items.title, items.visibility,
+                        categories.path AS category_path,
                         source_submissions.source_type, attachments.filename
                     FROM items
                     JOIN source_submissions ON source_submissions.id = items.submission_id
@@ -875,17 +887,22 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     detail="Item must have a category before publishing",
                 )
             repository_query = (
-                "SELECT id, name, raw_root, curated_root FROM repositories "
-                "WHERE id = :repository_id"
+                "SELECT id, name, raw_root, curated_root, visibility, publish_raw "
+                "FROM repositories WHERE id = :repository_id"
                 if repository_id
-                else "SELECT id, name, raw_root, curated_root FROM repositories "
-                "WHERE is_default = 1 ORDER BY created_at LIMIT 1"
+                else "SELECT id, name, raw_root, curated_root, visibility, publish_raw "
+                "FROM repositories WHERE is_default = 1 ORDER BY created_at LIMIT 1"
             )
             repository = connection.execute(
                 text(repository_query), {"repository_id": repository_id} if repository_id else {}
             ).mappings().first()
         if repository is None:
             raise HTTPException(status_code=422, detail="No target repository is configured")
+        if repository["visibility"] == "public" and item["visibility"] != "public":
+            raise HTTPException(
+                status_code=409,
+                detail="Private items cannot be published to a public repository",
+            )
 
         category_path = validate_relative_publication_path(item["category_path"])
         source_type = slugify_publication_name(item["source_type"])
@@ -894,7 +911,11 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         return {
             "repository_id": repository["id"],
             "repository_name": repository["name"],
-            "raw_path": f"{repository['raw_root']}/{source_type}/{item_id}/{filename}",
+            "raw_path": (
+                f"{repository['raw_root']}/{source_type}/{item_id}/{filename}"
+                if repository["publish_raw"] and repository["visibility"] != "public"
+                else None
+            ),
             "curated_path": f"{repository['curated_root']}/{category_path}/{title_slug}.md",
         }
 
@@ -929,9 +950,11 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             os.getenv("WIKI_WRANGLER_PUBLISH_WORKSPACE", "data/publish-workspaces")
         )
         workspace = workspace_root / str(preview["repository_id"])
-        raw_source = storage_root / item["storage_path"] if item["storage_path"] else None
-        if raw_source is None:
-            raise HTTPException(status_code=422, detail="Item has no source attachment")
+        raw_source = (
+            storage_root / item["storage_path"]
+            if preview["raw_path"] and item["storage_path"]
+            else None
+        )
         try:
             result = publish_remote(
                 item["remote_url"],
@@ -973,7 +996,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                     "id": publication_id,
                     "item_id": item_id,
                     "repository_id": preview["repository_id"],
-                    "raw_path": preview["raw_path"],
+                    "raw_path": preview["raw_path"] or "",
                     "curated_path": preview["curated_path"],
                     "commit_sha": result.commit_sha,
                     "branch": item["default_branch"],
@@ -1089,6 +1112,8 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             raise HTTPException(status_code=422, detail="At least one item field is required")
         if request.title is not None and not request.title.strip():
             raise HTTPException(status_code=422, detail="Title cannot be empty")
+        if request.visibility is not None and request.visibility not in {"private", "public"}:
+            raise HTTPException(status_code=422, detail="Unknown visibility")
 
         target_status: ItemStatus | None = None
         if request.status is not None:
@@ -1132,6 +1157,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 "category_id": request.category_id,
                 "markdown_final": request.markdown_final,
                 "status": target_status.value if target_status is not None else None,
+                "visibility": request.visibility,
                 "category_id_set": int("category_id" in request.model_fields_set),
             }
             connection.execute(
@@ -1145,7 +1171,8 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                             ELSE category_id
                         END,
                         markdown_final = COALESCE(:markdown_final, markdown_final),
-                        status = COALESCE(:status, status)
+                        status = COALESCE(:status, status),
+                        visibility = COALESCE(:visibility, visibility)
                     WHERE id = :item_id
                     """
                 ),
