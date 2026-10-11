@@ -668,6 +668,20 @@
       await loadItems();
     }
 
+    async function waitForPublishJob(jobId) {
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        const response = await fetch(`/api/publish-jobs/${encodeURIComponent(jobId)}`, {
+          credentials: "same-origin",
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Could not read publication status");
+        if (body.status === "succeeded") return body;
+        if (body.status === "failed") throw new Error(body.error_message || "Git publish failed");
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      }
+      throw new Error("Publication is still running. Check the item again shortly.");
+    }
+
     reviewSave.addEventListener("click", async () => {
       if (!selectedItem) return;
       reviewMessage.textContent = "Saving...";
@@ -737,11 +751,22 @@
         );
         const body = await response.json();
         if (!response.ok) throw new Error(body.detail || "Could not publish the item");
+        if (body.status === "queued") {
+          reviewPublish.disabled = true;
+          reviewMessage.textContent = "Publication queued...";
+          const completedJob = await waitForPublishJob(body.job_id);
+          await openReview(selectedItem.id);
+          await loadItems();
+          reviewMessage.textContent = `Published in commit ${completedJob.commit_sha}.`;
+          return;
+        }
         await openReview(selectedItem.id);
         await loadItems();
         reviewMessage.textContent = `Published in commit ${body.commit_sha}.`;
       } catch (error) {
         reviewMessage.textContent = error.message;
+      } finally {
+        reviewPublish.disabled = false;
       }
     });
 

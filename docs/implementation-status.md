@@ -104,6 +104,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Failed publish leaves the approved item retryable
   - [x] Queued job status and publication completion persist to SQLite
   - [x] Publish job status endpoint exposes queued, succeeded, and failed states
+  - [x] Review UI polls queued publication jobs and displays completion or failure
 - [ ] Raw and curated Git paths
   - [x] Approved-item publication path preview API
   - [x] Curated front matter links back to source and raw path
