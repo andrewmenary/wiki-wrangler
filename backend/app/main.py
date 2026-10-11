@@ -24,7 +24,7 @@ from app.db import (
 )
 from app.domain.items import ItemStatus, can_transition
 from app.publisher import build_curated_document, publish_remote
-from app.worker import DEFAULT_PUBLISH_QUEUE, queue_publish_job
+from app.worker import DEFAULT_PUBLISH_QUEUE, PublishQueue, queue_publish_job
 
 
 class CaptureRequest(BaseModel):
@@ -156,6 +156,10 @@ def git_commit_url(remote_url: str, commit_sha: str | None) -> str | None:
     else:
         return None
     return f"https://github.com/{repository.removesuffix('.git').strip('/')}/commit/{commit_sha}"
+
+
+def use_publish_queue() -> bool:
+    return os.getenv("WIKI_WRANGLER_PUBLISH_MODE", "direct").strip().lower() == "queued"
 
 
 def validate_repository_values(
@@ -969,26 +973,47 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             if preview["raw_path"] and item["storage_path"]
             else None
         )
-        publish_job = queue_publish_job(
-            remote_url=item["remote_url"],
-            workspace=workspace,
-            branch=item["default_branch"],
-            raw_source=raw_source,
-            raw_path=preview["raw_path"],
-            curated_path=preview["curated_path"],
-            curated_markdown=build_curated_document(
-                item["title"],
-                item["summary"],
-                item["source_ref"] if preview["repository_visibility"] == "private" else None,
-                preview["raw_path"],
-                item["markdown_final"] or "",
-            ),
-            commit_message=f"Publish {item['title']}",
-            queue=DEFAULT_PUBLISH_QUEUE,
-            runner=publish_remote,
+        publish_payload = build_curated_document(
+            item["title"],
+            item["summary"],
+            item["source_ref"] if preview["repository_visibility"] == "private" else None,
+            preview["raw_path"],
+            item["markdown_final"] or "",
         )
+        if use_publish_queue():
+            target_queue: PublishQueue = DEFAULT_PUBLISH_QUEUE
+            publish_job = queue_publish_job(
+                remote_url=item["remote_url"],
+                workspace=workspace,
+                branch=item["default_branch"],
+                raw_source=raw_source,
+                raw_path=preview["raw_path"],
+                curated_path=preview["curated_path"],
+                curated_markdown=publish_payload,
+                commit_message=f"Publish {item['title']}",
+                queue=target_queue,
+                runner=publish_remote,
+            )
+            return {
+                "id": publish_job.id,
+                "status": "queued",
+                "queued": True,
+                "repository_id": preview["repository_id"],
+                "curated_path": preview["curated_path"],
+                "job_id": publish_job.id,
+            }
+
         try:
-            result = publish_job.execute(runner=publish_remote)
+            result = publish_remote(
+                item["remote_url"],
+                workspace,
+                item["default_branch"],
+                raw_source,
+                preview["raw_path"],
+                preview["curated_path"],
+                publish_payload,
+                f"Publish {item['title']}",
+            )
         except Exception as error:
             raise HTTPException(status_code=502, detail=f"Git publish failed: {error}") from error
 

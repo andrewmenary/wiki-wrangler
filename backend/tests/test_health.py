@@ -341,6 +341,49 @@ async def test_approved_item_can_be_published_and_recorded(
     assert any(event["action"] == "item.published" for event in audit.json())
 
 
+async def test_publish_queue_mode_enqueues_job_without_inline_execution(
+    authenticated_client: httpx.AsyncClient,
+    monkeypatch,
+) -> None:
+    repository = await authenticated_client.post(
+        "/api/repositories",
+        json={
+            "name": "Queued Wiki",
+            "remote_url": "https://github.com/example/queued-wiki.git",
+            "credential_ref": "github-queued",
+            "is_default": True,
+        },
+    )
+    category = await authenticated_client.post(
+        "/api/categories",
+        json={"name": "Ops", "path": "ops"},
+    )
+    upload = await authenticated_client.post(
+        "/api/items/upload",
+        files={"file": ("notes.txt", b"Restart steps", "text/plain")},
+        data={"title": "Queue Item"},
+    )
+    item_id = upload.json()["id"]
+    await authenticated_client.post(f"/api/items/{item_id}/convert")
+    await authenticated_client.patch(
+        f"/api/items/{item_id}",
+        json={"category_id": category.json()["id"], "status": "review"},
+    )
+    await authenticated_client.patch(
+        f"/api/items/{item_id}", json={"status": "approved"}
+    )
+
+    monkeypatch.setenv("WIKI_WRANGLER_PUBLISH_MODE", "queued")
+    fake_queue = main.DEFAULT_PUBLISH_QUEUE
+    queued = await authenticated_client.post(f"/api/items/{item_id}/publish")
+
+    assert repository.status_code == 201
+    assert queued.status_code == 200
+    assert queued.json()["status"] == "queued"
+    assert "job_id" in queued.json()
+    assert fake_queue.pending_count >= 0
+
+
 async def test_public_repository_requires_public_item_and_omits_raw_path(
     authenticated_client: httpx.AsyncClient,
     monkeypatch,
