@@ -113,6 +113,7 @@ configuration, while partial items are intentionally called out in the notes.
 - [ ] Microsoft Entra ID authentication
 - [ ] GitHub OAuth authentication
 - [ ] Multi-user roles and authorization
+  - [x] Admin user listing, role promotion/demotion, and last-admin protection
 - [ ] Release hardening and installation documentation
 
 ## Verification

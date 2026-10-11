@@ -86,6 +86,10 @@ class RepositoryUpdateRequest(BaseModel):
     is_default: bool | None = None
 
 
+class UserRoleUpdateRequest(BaseModel):
+    role: str
+
+
 ALLOWED_UPLOAD_EXTENSIONS = {".csv", ".docx", ".md", ".pdf", ".pptx", ".txt", ".xlsx"}
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 MAX_URL_SIZE = 10 * 1024 * 1024
@@ -629,6 +633,65 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             event["details"] = json.loads(event.pop("details_json") or "{}")
             events.append(event)
         return events
+
+    @app.get("/api/users", dependencies=[Depends(require_admin)])
+    def list_users() -> list[dict[str, object]]:
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT id, display_name, email, role, is_active, created_at
+                    FROM users
+                    ORDER BY display_name
+                    """
+                )
+            ).mappings().all()
+        return [dict(row) for row in rows]
+
+    @app.patch("/api/users/{user_id}/role", dependencies=[Depends(require_admin)])
+    def update_user_role(
+        user_id: str,
+        request: UserRoleUpdateRequest,
+        admin: dict[str, object] = Depends(current_user),
+    ) -> dict[str, object]:
+        if request.role not in {"admin", "curator"}:
+            raise HTTPException(status_code=422, detail="Unknown user role")
+        with engine.begin() as connection:
+            target = connection.execute(
+                text("SELECT id, display_name, role FROM users WHERE id = :id"),
+                {"id": user_id},
+            ).mappings().first()
+            if target is None:
+                raise HTTPException(status_code=404, detail="User not found")
+            if target["role"] == "admin" and request.role == "curator":
+                admin_count = connection.execute(
+                    text("SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 1")
+                ).scalar_one()
+                if admin_count <= 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="The last administrator cannot be demoted",
+                    )
+            connection.execute(
+                text("UPDATE users SET role = :role WHERE id = :id"),
+                {"id": user_id, "role": request.role},
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (id, user_id, action, details_json)
+                    VALUES (:id, :user_id, 'user.role_changed', :details_json)
+                    """
+                ),
+                {
+                    "id": str(uuid4()),
+                    "user_id": admin["id"],
+                    "details_json": json.dumps(
+                        {"target_user_id": user_id, "role": request.role}
+                    ),
+                },
+            )
+        return {"id": user_id, "display_name": target["display_name"], "role": request.role}
 
     @app.post("/api/items", status_code=201, dependencies=[Depends(require_session)])
     def capture_item(request: CaptureRequest) -> dict[str, str]:

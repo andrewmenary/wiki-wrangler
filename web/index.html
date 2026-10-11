@@ -168,6 +168,12 @@
     .audit-row { padding: .55rem 0; border-top: 1px solid var(--line); font: .75rem/1.4 Arial, sans-serif; }
     .audit-row strong, .audit-row small { display: block; }
     .audit-row small { color: var(--muted); }
+    .user-list { display: grid; gap: .5rem; margin-top: 1rem; }
+    .user-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .5rem; align-items: center; padding: .55rem 0; border-top: 1px solid var(--line); font: .75rem/1.4 Arial, sans-serif; }
+    .user-row strong, .user-row small { display: block; }
+    .user-row small { color: var(--muted); }
+    .user-row select { width: auto; padding: .35rem; font: .75rem Arial, sans-serif; }
+    .user-row button { padding: .35rem .55rem; font-size: .72rem; }
     .review textarea { width: 100%; min-height: 180px; resize: vertical; }
     .review-actions { display: flex; gap: .6rem; margin-top: .8rem; }
     .review-actions button { flex: 1; }
@@ -372,6 +378,11 @@
           <div class="audit-list" id="audit-list"></div>
           <p class="message" id="audit-message" role="status"></p>
         </details>
+        <details class="category-settings" id="user-settings" hidden>
+          <summary>Manage users</summary>
+          <div class="user-list" id="user-list"></div>
+          <p class="message" id="user-message" role="status"></p>
+        </details>
       </div>
     </section>
   </main>
@@ -440,8 +451,12 @@
     const auditSettings = document.querySelector("#audit-settings");
     const auditList = document.querySelector("#audit-list");
     const auditMessage = document.querySelector("#audit-message");
+    const userSettings = document.querySelector("#user-settings");
+    const userList = document.querySelector("#user-list");
+    const userMessage = document.querySelector("#user-message");
     let categories = [];
     let repositories = [];
+    let users = [];
     let selectedItem = null;
     let editingCategoryId = null;
     let editingRepositoryId = null;
@@ -530,6 +545,13 @@
       auditList.innerHTML = events.length
         ? events.map((event) => `<div class="audit-row"><strong>${escapeHtml(event.action)}</strong><span>${escapeHtml(event.item_title || "System event")}</span><small>${escapeHtml(event.user_display_name || "Unknown user")} · ${escapeHtml(event.occurred_at)}</small></div>`).join("")
         : '<p class="empty">No audit events yet.</p>';
+    }
+
+    async function loadUsers() {
+      const response = await fetch("/api/users", { credentials: "same-origin" });
+      if (!response.ok) throw new Error("Could not load users");
+      users = await response.json();
+      userList.innerHTML = users.map((user) => `<div class="user-row"><div><strong>${escapeHtml(user.display_name)}</strong><small>${escapeHtml(user.email)}</small></div><select data-user-role="${user.id}" aria-label="Role for ${escapeHtml(user.display_name)}"><option value="curator"${user.role === "curator" ? " selected" : ""}>Curator</option><option value="admin"${user.role === "admin" ? " selected" : ""}>Admin</option></select><button type="button" data-save-user="${user.id}">Save</button></div>`).join("");
     }
 
     async function openReview(itemId) {
@@ -702,12 +724,14 @@
       appView.hidden = false;
       repositorySettings.hidden = user.role !== "admin";
       auditSettings.hidden = user.role !== "admin";
+      userSettings.hidden = user.role !== "admin";
       userGreeting.textContent = `Signed in as ${user.display_name}.`;
       loadItems().catch((error) => { captureMessage.textContent = error.message; });
       loadCategories().catch((error) => { categoryMessage.textContent = error.message; });
       if (user.role === "admin") {
         loadRepositories().catch((error) => { repositoryMessage.textContent = error.message; });
         loadAuditEvents().catch((error) => { auditMessage.textContent = error.message; });
+        loadUsers().catch((error) => { userMessage.textContent = error.message; });
       }
     }
 
@@ -839,6 +863,27 @@
       }
     });
 
+    userList.addEventListener("click", async (event) => {
+      const saveButton = event.target.closest("[data-save-user]");
+      if (!saveButton) return;
+      const userId = saveButton.dataset.saveUser;
+      const role = userList.querySelector(`[data-user-role="${userId}"]`).value;
+      const response = await fetch(`/api/users/${encodeURIComponent(userId)}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ role })
+      });
+      const body = await response.json();
+      userMessage.textContent = response.ok
+        ? "User role saved."
+        : (body.detail || "Could not update user role");
+      if (response.ok) {
+        await loadUsers();
+        await loadAuditEvents();
+      }
+    });
+
     categoryName.addEventListener("input", () => {
       if (editingCategoryId || categoryPathTouched) return;
       categoryPath.value = categoryName.value
@@ -858,6 +903,7 @@
       document.body.classList.remove("workspace-mode");
       repositorySettings.hidden = true;
       auditSettings.hidden = true;
+      userSettings.hidden = true;
       reviewView.hidden = true;
       selectedItem = null;
       message.textContent = "Signed out.";

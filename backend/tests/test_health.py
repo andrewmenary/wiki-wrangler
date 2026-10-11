@@ -141,6 +141,48 @@ async def test_repository_configuration_requires_admin(client: httpx.AsyncClient
     assert response.status_code == 403
 
 
+async def test_admin_can_promote_curator_but_not_demote_last_admin(
+    client: httpx.AsyncClient,
+) -> None:
+    admin_registration = await client.post(
+        "/api/auth/register",
+        json={"display_name": "Admin", "email": "admin@example.com", "password": "password123"},
+    )
+    admin_id = admin_registration.json()["id"]
+    client.cookies.clear()
+    curator_registration = await client.post(
+        "/api/auth/register",
+        json={"display_name": "Curator", "email": "curator@example.com", "password": "password123"},
+    )
+    curator_id = curator_registration.json()["id"]
+    client.cookies.clear()
+    await client.post(
+        "/api/auth/login",
+        json={"email": "admin@example.com", "password": "password123"},
+    )
+
+    promoted = await client.patch(
+        f"/api/users/{curator_id}/role", json={"role": "admin"}
+    )
+    assert promoted.status_code == 200
+    assert promoted.json()["role"] == "admin"
+
+    demoted = await client.patch(
+        f"/api/users/{admin_id}/role", json={"role": "curator"}
+    )
+    assert demoted.status_code == 200
+
+    client.cookies.clear()
+    await client.post(
+        "/api/auth/login",
+        json={"email": "curator@example.com", "password": "password123"},
+    )
+    last_admin = await client.patch(
+        f"/api/users/{curator_id}/role", json={"role": "curator"}
+    )
+    assert last_admin.status_code == 409
+
+
 async def test_admin_can_manage_repository_configuration(
     authenticated_client: httpx.AsyncClient,
 ) -> None:
