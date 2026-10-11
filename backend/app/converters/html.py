@@ -16,6 +16,7 @@ class _ReadableTextParser(HTMLParser):
         self._in_title = False
         self._link_href: str | None = None
         self._needs_space = False
+        self._list_item_depth = 0
 
     def _flush(self) -> None:
         line = re.sub(r"\s+", " ", self._current).strip()
@@ -45,12 +46,15 @@ class _ReadableTextParser(HTMLParser):
         if tag == "title":
             self._in_title = True
         elif tag in self._block_tags or tag in self._heading_prefixes:
+            if tag == "p" and self._list_item_depth and self._current.strip() == "-":
+                return
             self._flush()
             if tag in self._heading_prefixes:
                 self._current = f"{self._heading_prefixes[tag]} "
         elif tag == "li":
             self._flush()
             self._current = "- "
+            self._list_item_depth += 1
         elif tag in {"strong", "b"}:
             self._append("**")
         elif tag in {"em", "i"}:
@@ -67,7 +71,12 @@ class _ReadableTextParser(HTMLParser):
             return
         if tag == "title":
             self._in_title = False
-        elif tag in self._block_tags or tag in self._heading_prefixes or tag == "li":
+        elif tag == "li":
+            self._flush()
+            self._list_item_depth = max(0, self._list_item_depth - 1)
+        elif tag in self._block_tags or tag in self._heading_prefixes:
+            if tag == "p" and self._list_item_depth:
+                return
             self._flush()
         elif tag in {"strong", "b"}:
             self._append("**")

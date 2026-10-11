@@ -908,7 +908,7 @@ async def test_url_capture_extracts_text_and_preserves_source(
             return (
                 b"<html><head><title>Useful page</title><script>ignored()</script>"
                 b"</head><body><h1>Heading</h1><p><strong>Body</strong> text</p>"
-                b"<ul><li>First</li><li><a href='https://example.com'>Second</a></li></ul>"
+                b"<ul><li><p>First</p></li><li><a href='https://example.com'>Second</a></li></ul>"
                 b"</body></html>"
             )
 
@@ -923,6 +923,8 @@ async def test_url_capture_extracts_text_and_preserves_source(
     item = (await authenticated_client.get(f"/api/items/{response.json()['id']}")).json()
     assert item["status"] == "draft"
     assert item["title"] == "Useful page"
+    assert "- First" in item["markdown_generated"]
+    assert "- [Second](https://example.com)" in item["markdown_generated"]
     assert item["markdown_final"] == (
         "# Heading\n\n**Body** text\n\n- First\n\n- [Second](https://example.com)"
     )
