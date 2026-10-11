@@ -63,6 +63,45 @@ async def test_pasted_html_capture_creates_generated_draft(
     assert item.json()["markdown_generated"] == "# Restart guide\n\n**Step one**"
 
 
+async def test_pasted_capture_does_not_create_missing_raw_path(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    response = await authenticated_client.post(
+        "/api/items",
+        json={
+            "title": "Pasted note",
+            "source_type": "pasted",
+            "source_ref": "https://internal.example/note",
+            "markdown": "Pasted content",
+        },
+    )
+
+    item_id = response.json()["id"]
+    repository = await authenticated_client.post(
+        "/api/repositories",
+        json={
+            "name": "Pasted Wiki",
+            "remote_url": "https://github.com/example/pasted-wiki.git",
+            "credential_ref": "github-pasted",
+            "is_default": True,
+        },
+    )
+    assert repository.status_code == 201
+    category = await authenticated_client.post(
+        "/api/categories",
+        json={"name": "Pasted", "path": "pasted"},
+    )
+    await authenticated_client.patch(
+        f"/api/items/{item_id}",
+        json={"status": "review", "category_id": category.json()["id"]},
+    )
+    await authenticated_client.patch(f"/api/items/{item_id}", json={"status": "approved"})
+
+    preview = await authenticated_client.get(f"/api/items/{item_id}/publication-preview")
+    assert preview.status_code == 200
+    assert preview.json()["raw_path"] is None
+
+
 async def test_publishing_tables_are_initialized(client: httpx.AsyncClient, tmp_path) -> None:
     with sqlite3.connect(tmp_path / "test.sqlite3") as database:
         tables = {

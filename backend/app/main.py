@@ -1015,7 +1015,11 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             "visibility": item["visibility"],
             "raw_path": (
                 f"{repository['raw_root']}/{source_type}/{item_id}/{filename}"
-                if repository["publish_raw"] and repository["visibility"] != "public"
+                if (
+                    repository["publish_raw"]
+                    and repository["visibility"] != "public"
+                    and item["filename"]
+                )
                 else None
             ),
             "curated_path": f"{repository['curated_root']}/{category_path}/{title_slug}.md",
