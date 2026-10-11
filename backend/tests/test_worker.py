@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.publisher import PublishResult
-from app.worker import PublishJob, PublishQueue, start_publish_worker
+from app.worker import PublishJob, PublishJobStatus, PublishQueue, start_publish_worker
 
 
 def test_publish_queue_executes_enqueued_jobs() -> None:
@@ -30,6 +30,7 @@ def test_publish_queue_executes_enqueued_jobs() -> None:
     assert result.commit_sha == "abc123"
     assert events == ["https://github.com/example/wiki.git:main:workspace"]
     assert queue.pending_count == 0
+    assert queue.get_status("job-1") == PublishJobStatus.SUCCEEDED
 
 
 def test_publish_job_is_created_with_a_unique_id() -> None:
@@ -77,6 +78,7 @@ def test_start_publish_worker_runs_queued_jobs() -> None:
     assert results[0].commit_sha == "queued123"
     assert events == ["https://github.com/example/wiki.git:main:queued-workspace"]
     assert queue.pending_count == 0
+    assert queue.get_status("job-2") == PublishJobStatus.SUCCEEDED
 
 
 def test_publish_queue_uses_redis_client_when_present() -> None:
@@ -117,3 +119,4 @@ def test_publish_queue_uses_redis_client_when_present() -> None:
 
     assert result.commit_sha == "redis123"
     assert queue.pending_count == 0
+    assert queue.get_status("job-redis") == PublishJobStatus.SUCCEEDED

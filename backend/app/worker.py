@@ -6,6 +6,7 @@ import os
 import time
 from collections import deque
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from threading import Lock
 from typing import Any, Callable
@@ -19,6 +20,13 @@ except ImportError:  # pragma: no cover - optional dependency fallback
 from app.publisher import PublishResult, publish_remote
 
 JobRunner = Callable[..., PublishResult]
+
+
+class PublishJobStatus(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
 
 
 @dataclass
@@ -91,6 +99,7 @@ class PublishQueue:
     ) -> None:
         self._runner = runner or publish_remote
         self._jobs: deque[PublishJob] = deque()
+        self._statuses: dict[str, PublishJobStatus] = {}
         self._lock = Lock()
         self._redis_url = redis_url or os.getenv("WIKI_WRANGLER_REDIS_URL")
         self._queue_name = queue_name or os.getenv("WIKI_WRANGLER_PUBLISH_QUEUE", "wiki-wrangler:publish")
@@ -109,6 +118,7 @@ class PublishQueue:
         return len(self._jobs)
 
     def enqueue(self, job: PublishJob) -> PublishJob:
+        self._statuses[job.id] = PublishJobStatus.QUEUED
         if self._client is not None:
             self._client.rpush(self._queue_name, json.dumps(job.to_dict()))
             return job
@@ -116,18 +126,35 @@ class PublishQueue:
             self._jobs.append(job)
         return job
 
+    def get_status(self, job_id: str) -> PublishJobStatus | None:
+        return self._statuses.get(job_id)
+
     def run_next(self) -> PublishResult:
         if self._client is not None:
             payload = self._client.lpop(self._queue_name)
             if payload is None:
                 raise RuntimeError("No publish jobs are queued")
             job = PublishJob.from_dict(json.loads(payload))
-            return job.execute(runner=self._runner)
+            self._statuses[job.id] = PublishJobStatus.RUNNING
+            try:
+                result = job.execute(runner=self._runner)
+            except Exception:
+                self._statuses[job.id] = PublishJobStatus.FAILED
+                raise
+            self._statuses[job.id] = PublishJobStatus.SUCCEEDED
+            return result
         with self._lock:
             if not self._jobs:
                 raise RuntimeError("No publish jobs are queued")
             job = self._jobs.popleft()
-        return job.execute(runner=self._runner)
+        self._statuses[job.id] = PublishJobStatus.RUNNING
+        try:
+            result = job.execute(runner=self._runner)
+        except Exception:
+            self._statuses[job.id] = PublishJobStatus.FAILED
+            raise
+        self._statuses[job.id] = PublishJobStatus.SUCCEEDED
+        return result
 
     def drain(self) -> list[PublishResult]:
         results: list[PublishResult] = []
