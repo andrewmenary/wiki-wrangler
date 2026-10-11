@@ -982,6 +982,29 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         )
         if use_publish_queue():
             target_queue: PublishQueue = DEFAULT_PUBLISH_QUEUE
+            publish_job_id = str(uuid4())
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO publish_jobs
+                            (id, item_id, repository_id, status, max_retries,
+                             raw_path, curated_path, branch)
+                        VALUES
+                            (:id, :item_id, :repository_id, 'queued', :max_retries,
+                             :raw_path, :curated_path, :branch)
+                        """
+                    ),
+                    {
+                        "id": publish_job_id,
+                        "item_id": item_id,
+                        "repository_id": preview["repository_id"],
+                        "max_retries": 0,
+                        "raw_path": preview["raw_path"],
+                        "curated_path": preview["curated_path"],
+                        "branch": item["default_branch"],
+                    },
+                )
             publish_job = queue_publish_job(
                 remote_url=item["remote_url"],
                 workspace=workspace,
@@ -991,7 +1014,12 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 curated_path=preview["curated_path"],
                 curated_markdown=publish_payload,
                 commit_message=f"Publish {item['title']}",
+                item_id=item_id,
+                repository_id=preview["repository_id"],
+                published_by=user["id"],
+                database_url=resolved_url,
                 queue=target_queue,
+                job_id=publish_job_id,
                 runner=publish_remote,
             )
             return {
@@ -1069,6 +1097,25 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             "raw_path": preview["raw_path"],
             "curated_path": preview["curated_path"],
         }
+
+    @app.get("/api/publish-jobs/{job_id}", dependencies=[Depends(require_session)])
+    def get_publish_job(job_id: str) -> dict[str, object]:
+        with engine.connect() as connection:
+            job = connection.execute(
+                text(
+                    """
+                    SELECT id, item_id, repository_id, status, attempts, max_retries,
+                        error_message, commit_sha, raw_path, curated_path, branch,
+                        created_at, updated_at, completed_at
+                    FROM publish_jobs
+                    WHERE id = :id
+                    """
+                ),
+                {"id": job_id},
+            ).mappings().first()
+        if job is None:
+            raise HTTPException(status_code=404, detail="Publish job not found")
+        return dict(job)
 
     @app.get("/api/items/{item_id}/publication", dependencies=[Depends(require_session)])
     def get_publication(item_id: str) -> dict[str, object]:

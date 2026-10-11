@@ -200,6 +200,28 @@ def initialize_database(engine: Engine) -> None:
                 """
             )
         )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS publish_jobs (
+                    id TEXT PRIMARY KEY,
+                    item_id TEXT NOT NULL REFERENCES items(id),
+                    repository_id TEXT NOT NULL REFERENCES repositories(id),
+                    status TEXT NOT NULL,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    max_retries INTEGER NOT NULL DEFAULT 0,
+                    error_message TEXT,
+                    commit_sha TEXT,
+                    raw_path TEXT,
+                    curated_path TEXT NOT NULL,
+                    branch TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    completed_at TEXT
+                )
+                """
+            )
+        )
 
 
 def database_url_for_path(database_path: Path) -> str:

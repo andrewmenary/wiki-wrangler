@@ -383,6 +383,22 @@ async def test_publish_queue_mode_enqueues_job_without_inline_execution(
     assert "job_id" in queued.json()
     assert fake_queue.pending_count >= 0
 
+    job_id = queued.json()["job_id"]
+    queued_job = await authenticated_client.get(f"/api/publish-jobs/{job_id}")
+    assert queued_job.status_code == 200
+    assert queued_job.json()["status"] == "queued"
+
+    fake_queue._runner = lambda **kwargs: PublishResult(
+        commit_sha="queued-abc123", changed=True
+    )
+    fake_queue.run_next()
+
+    completed_job = await authenticated_client.get(f"/api/publish-jobs/{job_id}")
+    assert completed_job.json()["status"] == "succeeded"
+    publication = await authenticated_client.get(f"/api/items/{item_id}/publication")
+    assert publication.status_code == 200
+    assert publication.json()["commit_sha"] == "queued-abc123"
+
 
 async def test_public_repository_requires_public_item_and_omits_raw_path(
     authenticated_client: httpx.AsyncClient,

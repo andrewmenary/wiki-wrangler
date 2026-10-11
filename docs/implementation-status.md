@@ -102,6 +102,8 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Synchronous approved-item publish API boundary
   - [x] End-to-end API publish test against a local bare Git remote
   - [x] Failed publish leaves the approved item retryable
+  - [x] Queued job status and publication completion persist to SQLite
+  - [x] Publish job status endpoint exposes queued, succeeded, and failed states
 - [ ] Raw and curated Git paths
   - [x] Approved-item publication path preview API
   - [x] Curated front matter links back to source and raw path

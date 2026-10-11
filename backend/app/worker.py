@@ -14,11 +14,14 @@ from threading import Lock
 from typing import Any, Callable
 from uuid import uuid4
 
+from sqlalchemy import text
+
 try:
     from redis import Redis
 except ImportError:  # pragma: no cover - optional dependency fallback
     Redis = None
 
+from app.db import create_database_engine
 from app.publisher import PublishResult, publish_remote
 
 JobRunner = Callable[..., PublishResult]
@@ -45,6 +48,11 @@ class PublishJob:
     curated_markdown: str
     commit_message: str
     max_retries: int = 0
+    attempts: int = 0
+    item_id: str | None = None
+    repository_id: str | None = None
+    published_by: str | None = None
+    database_url: str | None = None
     runner: JobRunner | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -59,6 +67,11 @@ class PublishJob:
             "curated_markdown": self.curated_markdown,
             "commit_message": self.commit_message,
             "max_retries": self.max_retries,
+            "attempts": self.attempts,
+            "item_id": self.item_id,
+            "repository_id": self.repository_id,
+            "published_by": self.published_by,
+            "database_url": self.database_url,
         }
 
     @classmethod
@@ -75,6 +88,11 @@ class PublishJob:
             curated_markdown=str(payload["curated_markdown"]),
             commit_message=str(payload["commit_message"]),
             max_retries=int(payload.get("max_retries", 0)),
+            attempts=int(payload.get("attempts", 0)),
+            item_id=payload.get("item_id"),
+            repository_id=payload.get("repository_id"),
+            published_by=payload.get("published_by"),
+            database_url=payload.get("database_url"),
         )
 
     def execute(self, runner: JobRunner | None = None) -> PublishResult:
@@ -108,6 +126,102 @@ class PublishJob:
         if inspect.isawaitable(result):
             return await result
         return result
+
+
+def _persist_job_status(
+    job: PublishJob,
+    status: PublishJobStatus,
+    *,
+    error_message: str | None = None,
+) -> None:
+    if not job.database_url:
+        return
+    engine = create_database_engine(job.database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE publish_jobs
+                    SET status = :status, attempts = :attempts,
+                        error_message = :error_message, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :id
+                    """
+                ),
+                {
+                    "id": job.id,
+                    "status": status.value,
+                    "attempts": job.attempts,
+                    "error_message": error_message,
+                },
+            )
+    finally:
+        engine.dispose()
+
+
+def _persist_job_success(job: PublishJob, result: PublishResult) -> None:
+    if not job.database_url or not job.item_id or not job.repository_id:
+        return
+    engine = create_database_engine(job.database_url)
+    publication_id = str(uuid4())
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE publish_jobs
+                    SET status = 'succeeded', attempts = :attempts,
+                        commit_sha = :commit_sha, error_message = NULL,
+                        updated_at = CURRENT_TIMESTAMP, completed_at = CURRENT_TIMESTAMP
+                    WHERE id = :id
+                    """
+                ),
+                {"id": job.id, "attempts": job.attempts, "commit_sha": result.commit_sha},
+            )
+            connection.execute(
+                text("UPDATE items SET status = 'published' WHERE id = :item_id"),
+                {"item_id": job.item_id},
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO publications
+                        (id, item_id, repository_id, raw_path, curated_path,
+                         commit_sha, branch, published_by)
+                    VALUES
+                        (:id, :item_id, :repository_id, :raw_path, :curated_path,
+                         :commit_sha, :branch, :published_by)
+                    """
+                ),
+                {
+                    "id": publication_id,
+                    "item_id": job.item_id,
+                    "repository_id": job.repository_id,
+                    "raw_path": job.raw_path or "",
+                    "curated_path": job.curated_path,
+                    "commit_sha": result.commit_sha,
+                    "branch": job.branch,
+                    "published_by": job.published_by,
+                },
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (id, item_id, user_id, action, details_json)
+                    VALUES (:id, :item_id, :user_id, 'item.published', :details_json)
+                    """
+                ),
+                {
+                    "id": str(uuid4()),
+                    "item_id": job.item_id,
+                    "user_id": job.published_by,
+                    "details_json": json.dumps(
+                        {"repository_id": job.repository_id, "commit_sha": result.commit_sha}
+                    ),
+                },
+            )
+    finally:
+        engine.dispose()
 
 
 class PublishQueue:
@@ -154,10 +268,14 @@ class PublishQueue:
         return job
 
     def _retry_or_fail(self, job: PublishJob) -> None:
-        attempts = self._attempts.get(job.id, 0) + 1
+        attempts = max(self._attempts.get(job.id, 0), job.attempts)
         self._attempts[job.id] = attempts
+        job.attempts = attempts
         if attempts <= job.max_retries:
             self._statuses[job.id] = PublishJobStatus.QUEUED
+            _persist_job_status(
+                job, PublishJobStatus.QUEUED, error_message="Publish attempt failed"
+            )
             if self._client is not None:
                 self._client.rpush(self._queue_name, json.dumps(job.to_dict()))
             else:
@@ -165,6 +283,17 @@ class PublishQueue:
                     self._jobs.append(job)
             return
         self._statuses[job.id] = PublishJobStatus.FAILED
+        _persist_job_status(job, PublishJobStatus.FAILED, error_message="Publish attempt failed")
+
+    def _mark_running(self, job: PublishJob) -> None:
+        job.attempts = max(self._attempts.get(job.id, 0), job.attempts) + 1
+        self._attempts[job.id] = job.attempts
+        self._statuses[job.id] = PublishJobStatus.RUNNING
+        _persist_job_status(job, PublishJobStatus.RUNNING)
+
+    def _mark_succeeded(self, job: PublishJob, result: PublishResult) -> None:
+        self._statuses[job.id] = PublishJobStatus.SUCCEEDED
+        _persist_job_success(job, result)
 
     def get_status(self, job_id: str) -> PublishJobStatus | None:
         return self._statuses.get(job_id)
@@ -175,25 +304,25 @@ class PublishQueue:
             if payload is None:
                 raise RuntimeError("No publish jobs are queued")
             job = PublishJob.from_dict(json.loads(payload))
-            self._statuses[job.id] = PublishJobStatus.RUNNING
+            self._mark_running(job)
             try:
                 result = job.execute(runner=self._runner)
             except Exception:
                 self._retry_or_fail(job)
                 raise
-            self._statuses[job.id] = PublishJobStatus.SUCCEEDED
+            self._mark_succeeded(job, result)
             return result
         with self._lock:
             if not self._jobs:
                 raise RuntimeError("No publish jobs are queued")
             job = self._jobs.popleft()
-        self._statuses[job.id] = PublishJobStatus.RUNNING
+        self._mark_running(job)
         try:
             result = job.execute(runner=self._runner)
         except Exception:
             self._retry_or_fail(job)
             raise
-        self._statuses[job.id] = PublishJobStatus.SUCCEEDED
+        self._mark_succeeded(job, result)
         return result
 
     async def run_next_async(self) -> PublishResult:
@@ -202,25 +331,25 @@ class PublishQueue:
             if payload is None:
                 raise RuntimeError("No publish jobs are queued")
             job = PublishJob.from_dict(json.loads(payload))
-            self._statuses[job.id] = PublishJobStatus.RUNNING
+            self._mark_running(job)
             try:
                 result = await job.execute_async(runner=self._runner)
             except Exception:
                 self._retry_or_fail(job)
                 raise
-            self._statuses[job.id] = PublishJobStatus.SUCCEEDED
+            self._mark_succeeded(job, result)
             return result
         with self._lock:
             if not self._jobs:
                 raise RuntimeError("No publish jobs are queued")
             job = self._jobs.popleft()
-        self._statuses[job.id] = PublishJobStatus.RUNNING
+        self._mark_running(job)
         try:
             result = await job.execute_async(runner=self._runner)
         except Exception:
             self._retry_or_fail(job)
             raise
-        self._statuses[job.id] = PublishJobStatus.SUCCEEDED
+        self._mark_succeeded(job, result)
         return result
 
     def drain(self) -> list[PublishResult]:
@@ -259,6 +388,10 @@ def queue_publish_job(
     curated_markdown: str,
     commit_message: str,
     max_retries: int = 0,
+    item_id: str | None = None,
+    repository_id: str | None = None,
+    published_by: str | None = None,
+    database_url: str | None = None,
     queue: PublishQueue | None = None,
     job_id: str | None = None,
     runner: JobRunner | None = None,
@@ -275,6 +408,10 @@ def queue_publish_job(
         curated_markdown=curated_markdown,
         commit_message=commit_message,
         max_retries=max_retries,
+        item_id=item_id,
+        repository_id=repository_id,
+        published_by=published_by,
+        database_url=database_url,
         runner=runner,
     )
     target_queue.enqueue(job)
