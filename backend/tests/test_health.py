@@ -780,3 +780,38 @@ async def test_url_capture_extracts_text_and_preserves_source(
         "# Heading\n\n**Body** text\n\n- First\n\n- [Second](https://example.com)"
     )
     assert item["attachments"][0]["filename"] == "source.html"
+
+
+async def test_url_capture_preserves_document_for_markitdown_conversion(
+    authenticated_client: httpx.AsyncClient, monkeypatch
+) -> None:
+    class FakeHeaders:
+        def get_content_type(self) -> str:
+            return "application/pdf"
+
+    class FakeResponse:
+        headers = FakeHeaders()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, limit: int) -> bytes:
+            return b"PDF text content"
+
+    monkeypatch.setattr(main, "urlopen", lambda request, timeout: FakeResponse())
+
+    response = await authenticated_client.post(
+        "/api/items/url",
+        params={"url": "https://example.com/download"},
+    )
+
+    assert response.status_code == 201
+    item_id = response.json()["id"]
+    detail = await authenticated_client.get(f"/api/items/{item_id}")
+    assert detail.json()["status"] == "inbox"
+    assert detail.json()["attachments"][0]["filename"] == "source.pdf"
+    conversion = await authenticated_client.post(f"/api/items/{item_id}/convert")
+    assert conversion.status_code == 200

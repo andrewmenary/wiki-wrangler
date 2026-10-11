@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -1349,12 +1350,88 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         try:
             request = Request(url, headers={"User-Agent": "Wiki-Wrangler/0.1"})
             with urlopen(request, timeout=10) as response:
+                response_headers = getattr(response, "headers", None)
+                content_type = (
+                    response_headers.get_content_type()
+                    if response_headers is not None
+                    and hasattr(response_headers, "get_content_type")
+                    else None
+                )
                 content = response.read(MAX_URL_SIZE + 1)
         except (HTTPError, URLError, TimeoutError, OSError) as error:
             raise HTTPException(status_code=422, detail=f"Unable to fetch URL: {error}") from error
 
         if len(content) > MAX_URL_SIZE:
             raise HTTPException(status_code=413, detail="URL response exceeds the 10 MB limit")
+
+        url_path = urlparse(url).path
+        url_extension = Path(url_path).suffix.lower()
+        document_extensions = {
+            "application/pdf": ".pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+        }
+        document_extension = document_extensions.get(content_type or "") or url_extension
+        if document_extension in {".docx", ".pdf", ".pptx", ".xlsx"}:
+            source_filename = Path(url_path).name or f"source{document_extension}"
+            if Path(source_filename).suffix.lower() != document_extension:
+                source_filename = f"source{document_extension}"
+            submission_id = str(uuid4())
+            item_id = str(uuid4())
+            attachment_id = str(uuid4())
+            item_directory = storage_root / item_id
+            item_directory.mkdir(parents=True, exist_ok=False)
+            stored_path = item_directory / source_filename
+            stored_path.write_bytes(content)
+            try:
+                with engine.begin() as connection:
+                    connection.execute(
+                        text("""
+                            INSERT INTO source_submissions (id, source_type, source_ref)
+                            VALUES (:id, 'url', :source_ref)
+                            """),
+                        {"id": submission_id, "source_ref": url},
+                    )
+                    connection.execute(
+                        text("""
+                            INSERT INTO items (id, submission_id, title)
+                            VALUES (:id, :submission_id, :title)
+                            """),
+                        {
+                            "id": item_id,
+                            "submission_id": submission_id,
+                            "title": title or Path(source_filename).stem,
+                        },
+                    )
+                    connection.execute(
+                        text("""
+                            INSERT INTO attachments
+                                (id, item_id, filename, mime_type, storage_path, size_bytes)
+                            VALUES
+                                (:id, :item_id, :filename, :mime_type, :storage_path, :size_bytes)
+                            """),
+                        {
+                            "id": attachment_id,
+                            "item_id": item_id,
+                            "filename": source_filename,
+                            "mime_type": content_type or "application/octet-stream",
+                            "storage_path": str(stored_path.relative_to(storage_root)),
+                            "size_bytes": len(content),
+                        },
+                    )
+            except Exception:
+                stored_path.unlink(missing_ok=True)
+                item_directory.rmdir()
+                raise
+            return {
+                "id": item_id,
+                "submission_id": submission_id,
+                "attachment_id": attachment_id,
+                "status": "inbox",
+                "size_bytes": len(content),
+            }
+
         try:
             extracted_title, markdown = html_to_markdown(content)
         except (UnicodeError, ValueError) as error:

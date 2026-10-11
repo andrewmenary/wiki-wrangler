@@ -58,6 +58,7 @@ configuration, while partial items are intentionally called out in the notes.
 - [x] URL submission endpoint
   - [x] HTTP/HTTPS validation
   - [x] Basic HTML-to-Markdown structure extraction
+  - [x] Content-type-aware PDF/Office preservation for deferred conversion
   - [x] Raw HTML attachment storage
   - [x] Response size limit
 - [ ] Production conversion pipeline
