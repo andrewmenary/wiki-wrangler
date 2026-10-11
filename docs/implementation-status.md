@@ -33,12 +33,12 @@ configuration, while partial items are intentionally called out in the notes.
 - [ ] Complete repository scaffold from the target structure
   - [x] Basic backend package and test layout
   - [x] Web frontend login screen
-  - [x] Worker package (in-process publish queue abstraction with queued job execution)
+  - [x] Worker package (Redis-backed publish queue, async execution, and bounded retries)
 - [ ] Docker Compose foundation
   - [x] `web` service
   - [x] `api` service
-  - [ ] `worker` service
-  - [ ] `redis` service
+  - [x] `worker` service
+  - [x] `redis` service with persistent AOF volume
   - [x] Descriptive Compose project, image, and volume names
   - [x] API capture storage mapped into the persistent named volume
 - [ ] SQLite schema migrations with Alembic

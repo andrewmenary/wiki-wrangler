@@ -107,7 +107,10 @@ def test_publish_queue_uses_redis_client_when_present() -> None:
             return self.messages.pop(0)
 
     client = FakeRedisClient()
-    queue = PublishQueue(client=client, runner=lambda **kwargs: PublishResult(commit_sha="redis123", changed=True))
+    queue = PublishQueue(
+        client=client,
+        runner=lambda **kwargs: PublishResult(commit_sha="redis123", changed=True),
+    )
 
     queue.enqueue(
         PublishJob(
@@ -162,3 +165,63 @@ def test_get_publish_queue_builds_env_configured_queue() -> None:
 
     assert isinstance(queue, PublishQueue)
     assert queue._queue_name == "custom:jobs"
+
+
+def test_worker_retries_failed_jobs_before_succeeding() -> None:
+    attempts = 0
+
+    def flaky_runner(**kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("temporary publish failure")
+        return PublishResult(commit_sha="retried123", changed=True)
+
+    queue = PublishQueue(runner=flaky_runner)
+    queue.enqueue(
+        PublishJob(
+            id="job-retry",
+            remote_url="https://github.com/example/wiki.git",
+            workspace=Path("/tmp/retry-workspace"),
+            branch="main",
+            raw_source=None,
+            raw_path=None,
+            curated_path="curated/retry.md",
+            curated_markdown="# Retry\n",
+            commit_message="Publish retry notes",
+            max_retries=1,
+        )
+    )
+
+    results = start_publish_worker(queue, poll_interval=0.0, max_jobs=2)
+
+    assert [result.commit_sha for result in results] == ["retried123"]
+    assert attempts == 2
+    assert queue.get_status("job-retry") == PublishJobStatus.SUCCEEDED
+
+
+def test_worker_marks_job_failed_after_retry_limit() -> None:
+    def failing_runner(**kwargs):
+        raise RuntimeError("permanent publish failure")
+
+    queue = PublishQueue(runner=failing_runner)
+    queue.enqueue(
+        PublishJob(
+            id="job-failed",
+            remote_url="https://github.com/example/wiki.git",
+            workspace=Path("/tmp/failed-workspace"),
+            branch="main",
+            raw_source=None,
+            raw_path=None,
+            curated_path="curated/failed.md",
+            curated_markdown="# Failed\n",
+            commit_message="Publish failed notes",
+            max_retries=1,
+        )
+    )
+
+    results = start_publish_worker(queue, poll_interval=0.0, max_jobs=2)
+
+    assert results == []
+    assert queue.pending_count == 0
+    assert queue.get_status("job-failed") == PublishJobStatus.FAILED

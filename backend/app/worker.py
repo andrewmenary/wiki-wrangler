@@ -44,6 +44,7 @@ class PublishJob:
     curated_path: str
     curated_markdown: str
     commit_message: str
+    max_retries: int = 0
     runner: JobRunner | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -57,6 +58,7 @@ class PublishJob:
             "curated_path": self.curated_path,
             "curated_markdown": self.curated_markdown,
             "commit_message": self.commit_message,
+            "max_retries": self.max_retries,
         }
 
     @classmethod
@@ -72,6 +74,7 @@ class PublishJob:
             curated_path=str(payload["curated_path"]),
             curated_markdown=str(payload["curated_markdown"]),
             commit_message=str(payload["commit_message"]),
+            max_retries=int(payload.get("max_retries", 0)),
         )
 
     def execute(self, runner: JobRunner | None = None) -> PublishResult:
@@ -121,9 +124,12 @@ class PublishQueue:
         self._runner = runner or publish_remote
         self._jobs: deque[PublishJob] = deque()
         self._statuses: dict[str, PublishJobStatus] = {}
+        self._attempts: dict[str, int] = {}
         self._lock = Lock()
         self._redis_url = redis_url or os.getenv("WIKI_WRANGLER_REDIS_URL")
-        self._queue_name = queue_name or os.getenv("WIKI_WRANGLER_PUBLISH_QUEUE", "wiki-wrangler:publish")
+        self._queue_name = queue_name or os.getenv(
+            "WIKI_WRANGLER_PUBLISH_QUEUE", "wiki-wrangler:publish"
+        )
         self._client = client
         if self._client is None and self._redis_url and Redis is not None:
             self._client = Redis.from_url(self._redis_url, decode_responses=True)
@@ -147,6 +153,19 @@ class PublishQueue:
             self._jobs.append(job)
         return job
 
+    def _retry_or_fail(self, job: PublishJob) -> None:
+        attempts = self._attempts.get(job.id, 0) + 1
+        self._attempts[job.id] = attempts
+        if attempts <= job.max_retries:
+            self._statuses[job.id] = PublishJobStatus.QUEUED
+            if self._client is not None:
+                self._client.rpush(self._queue_name, json.dumps(job.to_dict()))
+            else:
+                with self._lock:
+                    self._jobs.append(job)
+            return
+        self._statuses[job.id] = PublishJobStatus.FAILED
+
     def get_status(self, job_id: str) -> PublishJobStatus | None:
         return self._statuses.get(job_id)
 
@@ -160,7 +179,7 @@ class PublishQueue:
             try:
                 result = job.execute(runner=self._runner)
             except Exception:
-                self._statuses[job.id] = PublishJobStatus.FAILED
+                self._retry_or_fail(job)
                 raise
             self._statuses[job.id] = PublishJobStatus.SUCCEEDED
             return result
@@ -172,7 +191,7 @@ class PublishQueue:
         try:
             result = job.execute(runner=self._runner)
         except Exception:
-            self._statuses[job.id] = PublishJobStatus.FAILED
+            self._retry_or_fail(job)
             raise
         self._statuses[job.id] = PublishJobStatus.SUCCEEDED
         return result
@@ -187,7 +206,7 @@ class PublishQueue:
             try:
                 result = await job.execute_async(runner=self._runner)
             except Exception:
-                self._statuses[job.id] = PublishJobStatus.FAILED
+                self._retry_or_fail(job)
                 raise
             self._statuses[job.id] = PublishJobStatus.SUCCEEDED
             return result
@@ -199,7 +218,7 @@ class PublishQueue:
         try:
             result = await job.execute_async(runner=self._runner)
         except Exception:
-            self._statuses[job.id] = PublishJobStatus.FAILED
+            self._retry_or_fail(job)
             raise
         self._statuses[job.id] = PublishJobStatus.SUCCEEDED
         return result
@@ -239,6 +258,7 @@ def queue_publish_job(
     curated_path: str,
     curated_markdown: str,
     commit_message: str,
+    max_retries: int = 0,
     queue: PublishQueue | None = None,
     job_id: str | None = None,
     runner: JobRunner | None = None,
@@ -254,6 +274,7 @@ def queue_publish_job(
         curated_path=curated_path,
         curated_markdown=curated_markdown,
         commit_message=commit_message,
+        max_retries=max_retries,
         runner=runner,
     )
     target_queue.enqueue(job)
@@ -286,7 +307,8 @@ def start_publish_worker(
         try:
             results.append(target_queue.run_next())
             processed += 1
-        except RuntimeError:
+        except Exception:
+            processed += 1
             time.sleep(poll_interval)
             continue
 
@@ -315,7 +337,8 @@ async def async_start_publish_worker(
         try:
             results.append(await target_queue.run_next_async())
             processed += 1
-        except RuntimeError:
+        except Exception:
+            processed += 1
             await asyncio.sleep(poll_interval)
             continue
 
@@ -343,7 +366,10 @@ def _main() -> None:
     parser.add_argument("--poll-interval", type=float, default=1.0)
     parser.add_argument("--max-jobs", type=int, default=None)
     parser.add_argument("--redis-url", default=os.getenv("WIKI_WRANGLER_REDIS_URL"))
-    parser.add_argument("--queue-name", default=os.getenv("WIKI_WRANGLER_PUBLISH_QUEUE", "wiki-wrangler:publish"))
+    parser.add_argument(
+        "--queue-name",
+        default=os.getenv("WIKI_WRANGLER_PUBLISH_QUEUE", "wiki-wrangler:publish"),
+    )
     args = parser.parse_args()
 
     asyncio.run(

@@ -51,8 +51,12 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    command: ["redis-server", "--appendonly", "no"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - wiki-wrangler-redis:/data
 
 volumes:
   wiki-wrangler-data:
     name: wiki-wrangler-data
+  wiki-wrangler-redis:
+    name: wiki-wrangler-redis
