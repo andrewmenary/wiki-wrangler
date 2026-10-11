@@ -27,8 +27,11 @@ def build_curated_document(
         "---",
         f"title: {json.dumps(title)}",
         f"summary: {json.dumps(summary or '')}",
-        f"source: {json.dumps(source_ref or '')}",
     ]
+    if source_ref:
+        front_matter.append(f"source: {json.dumps(source_ref)}")
+    else:
+        front_matter.append("source_redacted: true")
     if raw_path:
         front_matter.append(f"raw_path: {json.dumps(raw_path)}")
     else:

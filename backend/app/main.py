@@ -911,6 +911,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
         return {
             "repository_id": repository["id"],
             "repository_name": repository["name"],
+            "repository_visibility": repository["visibility"],
             "raw_path": (
                 f"{repository['raw_root']}/{source_type}/{item_id}/{filename}"
                 if repository["publish_raw"] and repository["visibility"] != "public"
@@ -966,7 +967,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 build_curated_document(
                     item["title"],
                     item["summary"],
-                    item["source_ref"],
+                    item["source_ref"] if preview["repository_visibility"] == "private" else None,
                     preview["raw_path"],
                     item["markdown_final"] or "",
                 ),

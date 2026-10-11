@@ -25,6 +25,16 @@ def test_build_curated_document_includes_provenance() -> None:
     assert 'raw_path: "raw/web/item-1/source.html"' in document
     assert document.endswith("# Guide\n")
 
+    public_document = build_curated_document(
+        "Public Guide",
+        None,
+        None,
+        None,
+        "# Public guide\n",
+    )
+    assert "source_redacted: true" in public_document
+    assert "raw_path:" not in public_document
+
 
 def test_publish_worktree_writes_both_paths_and_is_idempotent(tmp_path) -> None:
     repository = tmp_path / "repository"
