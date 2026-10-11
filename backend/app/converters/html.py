@@ -19,6 +19,7 @@ class _ReadableTextParser(HTMLParser):
         self._list_item_depth = 0
         self._strong_depth = 0
         self._emphasis_depth = 0
+        self._join_next_text = False
 
     def _flush(self) -> None:
         line = re.sub(r"\s+", " ", self._current).strip()
@@ -27,6 +28,11 @@ class _ReadableTextParser(HTMLParser):
         self._current = ""
 
     def _append(self, value: str) -> None:
+        if self._join_next_text:
+            self._join_next_text = False
+            self._needs_space = False
+            self._current += value
+            return
         if (
             self._needs_space
             and self._current
@@ -63,6 +69,14 @@ class _ReadableTextParser(HTMLParser):
             self._current = "- "
             self._list_item_depth += 1
         elif tag in {"strong", "b"}:
+            if self._link_href and self._current and not self._current.endswith(" "):
+                match = re.search(r"([\w]+)$", self._current)
+                if match:
+                    word = match.group(1)
+                    self._current = self._current[:-len(word)] + "**" + word
+                    self._join_next_text = True
+                    self._strong_depth += 1
+                    return
             if self._strong_depth == 0:
                 if self._current and not self._current.endswith((" ", "[", "(")):
                     self._current += " "
