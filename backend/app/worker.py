@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from typing import Callable
+from typing import Any, Callable
 from uuid import uuid4
+
+try:
+    from redis import Redis
+except ImportError:  # pragma: no cover - optional dependency fallback
+    Redis = None
 
 from app.publisher import PublishResult, publish_remote
 
@@ -29,6 +36,34 @@ class PublishJob:
     commit_message: str
     runner: JobRunner | None = None
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "remote_url": self.remote_url,
+            "workspace": str(self.workspace),
+            "branch": self.branch,
+            "raw_source": str(self.raw_source) if self.raw_source else None,
+            "raw_path": self.raw_path,
+            "curated_path": self.curated_path,
+            "curated_markdown": self.curated_markdown,
+            "commit_message": self.commit_message,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PublishJob":
+        raw_source = payload.get("raw_source")
+        return cls(
+            id=str(payload["id"]),
+            remote_url=str(payload["remote_url"]),
+            workspace=Path(str(payload["workspace"])),
+            branch=str(payload["branch"]),
+            raw_source=Path(raw_source) if raw_source else None,
+            raw_path=payload.get("raw_path"),
+            curated_path=str(payload["curated_path"]),
+            curated_markdown=str(payload["curated_markdown"]),
+            commit_message=str(payload["commit_message"]),
+        )
+
     def execute(self, runner: JobRunner | None = None) -> PublishResult:
         callback = runner or self.runner or publish_remote
         return callback(
@@ -44,12 +79,24 @@ class PublishJob:
 
 
 class PublishQueue:
-    """Small in-process queue that can later be replaced by Redis/arq."""
+    """Queue wrapper with an in-memory fallback and optional Redis backend."""
 
-    def __init__(self, runner: JobRunner | None = None) -> None:
+    def __init__(
+        self,
+        runner: JobRunner | None = None,
+        *,
+        redis_url: str | None = None,
+        queue_name: str | None = None,
+        client: Any | None = None,
+    ) -> None:
         self._runner = runner or publish_remote
         self._jobs: deque[PublishJob] = deque()
         self._lock = Lock()
+        self._redis_url = redis_url or os.getenv("WIKI_WRANGLER_REDIS_URL")
+        self._queue_name = queue_name or os.getenv("WIKI_WRANGLER_PUBLISH_QUEUE", "wiki-wrangler:publish")
+        self._client = client
+        if self._client is None and self._redis_url and Redis is not None:
+            self._client = Redis.from_url(self._redis_url, decode_responses=True)
 
     @property
     def runner(self) -> JobRunner:
@@ -57,14 +104,25 @@ class PublishQueue:
 
     @property
     def pending_count(self) -> int:
+        if self._client is not None:
+            return int(self._client.llen(self._queue_name))
         return len(self._jobs)
 
     def enqueue(self, job: PublishJob) -> PublishJob:
+        if self._client is not None:
+            self._client.rpush(self._queue_name, json.dumps(job.to_dict()))
+            return job
         with self._lock:
             self._jobs.append(job)
         return job
 
     def run_next(self) -> PublishResult:
+        if self._client is not None:
+            payload = self._client.lpop(self._queue_name)
+            if payload is None:
+                raise RuntimeError("No publish jobs are queued")
+            job = PublishJob.from_dict(json.loads(payload))
+            return job.execute(runner=self._runner)
         with self._lock:
             if not self._jobs:
                 raise RuntimeError("No publish jobs are queued")
@@ -152,10 +210,13 @@ def _main() -> None:
     parser = argparse.ArgumentParser(description="Run the Wiki Wrangler publish worker")
     parser.add_argument("--poll-interval", type=float, default=1.0)
     parser.add_argument("--max-jobs", type=int, default=None)
+    parser.add_argument("--redis-url", default=os.getenv("WIKI_WRANGLER_REDIS_URL"))
+    parser.add_argument("--queue-name", default=os.getenv("WIKI_WRANGLER_PUBLISH_QUEUE", "wiki-wrangler:publish"))
     args = parser.parse_args()
 
+    queue = PublishQueue(redis_url=args.redis_url, queue_name=args.queue_name)
     while True:
-        start_publish_worker(DEFAULT_PUBLISH_QUEUE, poll_interval=args.poll_interval, max_jobs=args.max_jobs)
+        start_publish_worker(queue, poll_interval=args.poll_interval, max_jobs=args.max_jobs)
         if args.max_jobs is not None:
             return
         time.sleep(args.poll_interval)

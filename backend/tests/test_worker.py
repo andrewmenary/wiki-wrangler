@@ -77,3 +77,43 @@ def test_start_publish_worker_runs_queued_jobs() -> None:
     assert results[0].commit_sha == "queued123"
     assert events == ["https://github.com/example/wiki.git:main:queued-workspace"]
     assert queue.pending_count == 0
+
+
+def test_publish_queue_uses_redis_client_when_present() -> None:
+    class FakeRedisClient:
+        def __init__(self) -> None:
+            self.messages: list[str] = []
+
+        def rpush(self, name: str, value: str) -> int:
+            self.messages.append(value)
+            return len(self.messages)
+
+        def llen(self, name: str) -> int:
+            return len(self.messages)
+
+        def lpop(self, name: str) -> str | None:
+            if not self.messages:
+                return None
+            return self.messages.pop(0)
+
+    client = FakeRedisClient()
+    queue = PublishQueue(client=client, runner=lambda **kwargs: PublishResult(commit_sha="redis123", changed=True))
+
+    queue.enqueue(
+        PublishJob(
+            id="job-redis",
+            remote_url="https://github.com/example/wiki.git",
+            workspace=Path("/tmp/redis-workspace"),
+            branch="main",
+            raw_source=None,
+            raw_path=None,
+            curated_path="curated/redis.md",
+            curated_markdown="# Redis\n",
+            commit_message="Publish redis notes",
+        )
+    )
+
+    result = queue.run_next()
+
+    assert result.commit_sha == "redis123"
+    assert queue.pending_count == 0
