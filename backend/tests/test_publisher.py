@@ -18,11 +18,13 @@ def test_build_curated_document_includes_provenance() -> None:
         "https://example.com/guide",
         "raw/web/item-1/source.html",
         "# Guide\n",
+        ["operations", "runbook"],
     )
 
     assert 'title: "Service Guide"' in document
     assert 'source: "https://example.com/guide"' in document
     assert 'raw_path: "raw/web/item-1/source.html"' in document
+    assert 'tags: ["operations", "runbook"]' in document
     assert document.endswith("# Guide\n")
 
     public_document = build_curated_document(
@@ -31,9 +33,11 @@ def test_build_curated_document_includes_provenance() -> None:
         None,
         None,
         "# Public guide\n",
+        ["public", "guide"],
     )
     assert "source_redacted: true" in public_document
     assert "raw_path:" not in public_document
+    assert 'tags: ["public", "guide"]' in public_document
 
 
 def test_publish_worktree_writes_both_paths_and_is_idempotent(tmp_path) -> None:

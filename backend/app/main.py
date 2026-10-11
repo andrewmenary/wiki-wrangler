@@ -953,7 +953,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
                 text(
                     """
                     SELECT items.title, items.markdown_final, attachments.storage_path,
-                        items.summary, source_submissions.source_ref,
+                        items.summary, items.tags_json, source_submissions.source_ref,
                         repositories.remote_url, repositories.default_branch
                     FROM items
                     JOIN source_submissions ON source_submissions.id = items.submission_id
@@ -983,6 +983,7 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             item["source_ref"] if preview["repository_visibility"] == "private" else None,
             preview["raw_path"],
             item["markdown_final"] or "",
+            json.loads(item["tags_json"] or "[]"),
         )
         if use_publish_queue():
             target_queue: PublishQueue = DEFAULT_PUBLISH_QUEUE

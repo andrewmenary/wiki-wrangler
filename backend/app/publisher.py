@@ -21,12 +21,14 @@ def build_curated_document(
     source_ref: str | None,
     raw_path: str | None,
     markdown: str,
+    tags: list[str] | None = None,
 ) -> str:
     """Add stable provenance metadata to the curated Markdown document."""
     front_matter = [
         "---",
         f"title: {json.dumps(title)}",
         f"summary: {json.dumps(summary or '')}",
+        f"tags: {json.dumps(tags or [], ensure_ascii=False)}",
     ]
     if source_ref:
         front_matter.append(f"source: {json.dumps(source_ref)}")
