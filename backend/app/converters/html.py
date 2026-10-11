@@ -17,6 +17,8 @@ class _ReadableTextParser(HTMLParser):
         self._link_href: str | None = None
         self._needs_space = False
         self._list_item_depth = 0
+        self._strong_depth = 0
+        self._emphasis_depth = 0
 
     def _flush(self) -> None:
         line = re.sub(r"\s+", " ", self._current).strip()
@@ -25,13 +27,18 @@ class _ReadableTextParser(HTMLParser):
         self._current = ""
 
     def _append(self, value: str) -> None:
-        if self._needs_space and self._current and not self._current.endswith(" "):
+        if (
+            self._needs_space
+            and self._current
+            and not self._current.endswith(" ")
+            and not value.startswith(("]", ")", ",", ".", ":", ";", "!", "?"))
+        ):
             self._current += " "
         self._needs_space = False
         if (
             self._current
             and not self._current.endswith((" ", "[", "**", "_"))
-            and not value.startswith("]")
+            and not value.startswith(("]", ")", ",", ".", ":", ";", "!", "?"))
             and value not in {"**", "_"}
         ):
             self._current += " "
@@ -56,9 +63,17 @@ class _ReadableTextParser(HTMLParser):
             self._current = "- "
             self._list_item_depth += 1
         elif tag in {"strong", "b"}:
-            self._append("**")
+            if self._strong_depth == 0:
+                if self._current and not self._current.endswith((" ", "[", "(")):
+                    self._current += " "
+                self._current += "**"
+            self._strong_depth += 1
         elif tag in {"em", "i"}:
-            self._append("_")
+            if self._emphasis_depth == 0:
+                if self._current and not self._current.endswith((" ", "[", "(")):
+                    self._current += " "
+                self._current += "_"
+            self._emphasis_depth += 1
         elif tag == "a":
             self._append("[")
             self._link_href = next((value for name, value in attrs if name == "href"), None)
@@ -79,11 +94,15 @@ class _ReadableTextParser(HTMLParser):
                 return
             self._flush()
         elif tag in {"strong", "b"}:
-            self._append("**")
-            self._needs_space = True
+            self._strong_depth = max(0, self._strong_depth - 1)
+            if self._strong_depth == 0:
+                self._current += "**"
+                self._needs_space = True
         elif tag in {"em", "i"}:
-            self._append("_")
-            self._needs_space = True
+            self._emphasis_depth = max(0, self._emphasis_depth - 1)
+            if self._emphasis_depth == 0:
+                self._current += "_"
+                self._needs_space = True
         elif tag == "a":
             self._append(f"]({self._link_href})" if self._link_href else "]")
             self._link_href = None
