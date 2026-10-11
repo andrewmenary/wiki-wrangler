@@ -107,6 +107,7 @@ configuration, while partial items are intentionally called out in the notes.
   - [x] Curated front matter links back to source and raw path
   - [x] Public publication redacts private source URLs and raw paths
   - [x] Item publication visibility control in review
+  - [x] Explicit confirmation required before public publication
 - [ ] Publication records and commit links
   - [x] Publication and audit schema foundation
   - [x] Publish API persists commit and resolved path metadata

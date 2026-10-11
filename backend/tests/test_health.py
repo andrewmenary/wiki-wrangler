@@ -385,11 +385,16 @@ async def test_public_repository_requires_public_item_and_omits_raw_path(
     assert preview.status_code == 200
     assert preview.json()["raw_path"] is None
 
+    unconfirmed = await authenticated_client.post(f"/api/items/{item_id}/publish")
+    assert unconfirmed.status_code == 409
+
     def fake_publish(*args, **kwargs):
         return PublishResult(commit_sha="public123", changed=True)
 
     monkeypatch.setattr(main, "publish_remote", fake_publish)
-    published = await authenticated_client.post(f"/api/items/{item_id}/publish")
+    published = await authenticated_client.post(
+        f"/api/items/{item_id}/publish", json={"confirm_public": True}
+    )
     assert published.status_code == 200
     assert published.json()["raw_path"] is None
 

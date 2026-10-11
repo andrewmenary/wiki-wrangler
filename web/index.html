@@ -720,11 +720,20 @@
 
     reviewPublish.addEventListener("click", async () => {
       if (!selectedItem) return;
+      const confirmPublic = selectedItem.visibility === "public"
+        ? window.confirm("Publish this item to a public repository? Private source details will be redacted.")
+        : false;
+      if (selectedItem.visibility === "public" && !confirmPublic) return;
       reviewMessage.textContent = "Publishing...";
       try {
         const response = await fetch(
           `/api/items/${encodeURIComponent(selectedItem.id)}/publish`,
-          { method: "POST", credentials: "same-origin" },
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ confirm_public: confirmPublic })
+          },
         );
         const body = await response.json();
         if (!response.ok) throw new Error(body.detail || "Could not publish the item");

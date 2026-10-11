@@ -100,6 +100,10 @@ class UserStatusUpdateRequest(BaseModel):
     is_active: bool
 
 
+class PublishRequest(BaseModel):
+    confirm_public: bool = False
+
+
 ALLOWED_UPLOAD_EXTENSIONS = {".csv", ".docx", ".md", ".pdf", ".pptx", ".txt", ".xlsx"}
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 MAX_URL_SIZE = 10 * 1024 * 1024
@@ -923,10 +927,18 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
     @app.post("/api/items/{item_id}/publish", dependencies=[Depends(require_session)])
     def publish_item(
         item_id: str,
+        request: PublishRequest | None = None,
         repository_id: str | None = None,
         user: dict[str, object] = Depends(current_user),
     ) -> dict[str, object]:
         preview = publication_preview(item_id, repository_id)
+        if preview["repository_visibility"] == "public" and not (
+            request and request.confirm_public
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Public publication requires explicit confirmation",
+            )
         with engine.connect() as connection:
             item = connection.execute(
                 text(
