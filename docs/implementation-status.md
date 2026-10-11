@@ -33,7 +33,7 @@ configuration, while partial items are intentionally called out in the notes.
 - [ ] Complete repository scaffold from the target structure
   - [x] Basic backend package and test layout
   - [x] Web frontend login screen
-  - [ ] Worker package
+  - [x] Worker package (in-process publish queue abstraction with queued job execution)
 - [ ] Docker Compose foundation
   - [x] `web` service
   - [x] `api` service

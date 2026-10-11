@@ -24,6 +24,7 @@ from app.db import (
 )
 from app.domain.items import ItemStatus, can_transition
 from app.publisher import build_curated_document, publish_remote
+from app.worker import DEFAULT_PUBLISH_QUEUE, queue_publish_job
 
 
 class CaptureRequest(BaseModel):
@@ -968,23 +969,26 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             if preview["raw_path"] and item["storage_path"]
             else None
         )
-        try:
-            result = publish_remote(
-                item["remote_url"],
-                workspace,
-                item["default_branch"],
-                raw_source,
+        publish_job = queue_publish_job(
+            remote_url=item["remote_url"],
+            workspace=workspace,
+            branch=item["default_branch"],
+            raw_source=raw_source,
+            raw_path=preview["raw_path"],
+            curated_path=preview["curated_path"],
+            curated_markdown=build_curated_document(
+                item["title"],
+                item["summary"],
+                item["source_ref"] if preview["repository_visibility"] == "private" else None,
                 preview["raw_path"],
-                preview["curated_path"],
-                build_curated_document(
-                    item["title"],
-                    item["summary"],
-                    item["source_ref"] if preview["repository_visibility"] == "private" else None,
-                    preview["raw_path"],
-                    item["markdown_final"] or "",
-                ),
-                f"Publish {item['title']}",
-            )
+                item["markdown_final"] or "",
+            ),
+            commit_message=f"Publish {item['title']}",
+            queue=DEFAULT_PUBLISH_QUEUE,
+            runner=publish_remote,
+        )
+        try:
+            result = publish_job.execute(runner=publish_remote)
         except Exception as error:
             raise HTTPException(status_code=502, detail=f"Git publish failed: {error}") from error
 
