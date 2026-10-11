@@ -925,6 +925,8 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             "repository_id": repository["id"],
             "repository_name": repository["name"],
             "repository_visibility": repository["visibility"],
+            "category_path": item["category_path"],
+            "visibility": item["visibility"],
             "raw_path": (
                 f"{repository['raw_root']}/{source_type}/{item_id}/{filename}"
                 if repository["publish_raw"] and repository["visibility"] != "public"
@@ -984,6 +986,8 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             preview["raw_path"],
             item["markdown_final"] or "",
             json.loads(item["tags_json"] or "[]"),
+            preview["category_path"],
+            preview["visibility"],
         )
         if use_publish_queue():
             target_queue: PublishQueue = DEFAULT_PUBLISH_QUEUE

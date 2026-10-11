@@ -22,6 +22,8 @@ def build_curated_document(
     raw_path: str | None,
     markdown: str,
     tags: list[str] | None = None,
+    category_path: str | None = None,
+    visibility: str | None = None,
 ) -> str:
     """Add stable provenance metadata to the curated Markdown document."""
     front_matter = [
@@ -29,6 +31,8 @@ def build_curated_document(
         f"title: {json.dumps(title)}",
         f"summary: {json.dumps(summary or '')}",
         f"tags: {json.dumps(tags or [], ensure_ascii=False)}",
+        f"category: {json.dumps(category_path or '', ensure_ascii=False)}",
+        f"visibility: {json.dumps(visibility or 'private')}",
     ]
     if source_ref:
         front_matter.append(f"source: {json.dumps(source_ref)}")
