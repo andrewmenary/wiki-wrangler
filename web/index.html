@@ -375,6 +375,14 @@
               <input id="repository-branch" type="text" value="main" required>
             </label>
             <label>
+              Publish mode
+              <select id="repository-publish-mode">
+                <option value="direct">Direct commit</option>
+                <option value="pull_request" disabled>Pull request (not available yet)</option>
+              </select>
+              <small>Queue execution is controlled by the deployment configuration.</small>
+            </label>
+            <label>
               Credential reference
               <input id="repository-credential" type="text" placeholder="github-work" required>
             </label>
@@ -480,6 +488,7 @@
     const repositoryName = document.querySelector("#repository-name");
     const repositoryRemote = document.querySelector("#repository-remote");
     const repositoryBranch = document.querySelector("#repository-branch");
+    const repositoryPublishMode = document.querySelector("#repository-publish-mode");
     const repositoryCredential = document.querySelector("#repository-credential");
     const repositoryRawRoot = document.querySelector("#repository-raw-root");
     const repositoryCuratedRoot = document.querySelector("#repository-curated-root");
@@ -574,7 +583,7 @@
       if (!response.ok) throw new Error("Could not load repositories");
       repositories = await response.json();
       repositoryList.innerHTML = repositories.length
-        ? repositories.map((repository) => `<div class="repository-row"><div class="repository-label"><strong>${escapeHtml(repository.name)}${repository.is_default ? " (default)" : ""}</strong><small>${escapeHtml(repository.visibility)} · raw ${repository.publish_raw ? "on" : "off"} · ${escapeHtml(repository.curated_root)} · ${escapeHtml(repository.remote_url)}</small></div><span class="repository-actions"><button type="button" data-edit-repository="${repository.id}">Edit</button><button type="button" data-delete-repository="${repository.id}">Delete</button></span></div>`).join("")
+        ? repositories.map((repository) => `<div class="repository-row"><div class="repository-label"><strong>${escapeHtml(repository.name)}${repository.is_default ? " (default)" : ""}</strong><small>${escapeHtml(repository.publish_mode)} · ${escapeHtml(repository.visibility)} · raw ${repository.publish_raw ? "on" : "off"} · ${escapeHtml(repository.curated_root)} · ${escapeHtml(repository.remote_url)}</small></div><span class="repository-actions"><button type="button" data-edit-repository="${repository.id}">Edit</button><button type="button" data-delete-repository="${repository.id}">Delete</button></span></div>`).join("")
         : '<p class="empty">No repositories configured.</p>';
     }
 
@@ -900,6 +909,7 @@
             name: repositoryName.value,
             remote_url: repositoryRemote.value,
             default_branch: repositoryBranch.value,
+            publish_mode: repositoryPublishMode.value,
             credential_ref: repositoryCredential.value,
             raw_root: repositoryRawRoot.value,
             curated_root: repositoryCuratedRoot.value,
@@ -913,6 +923,7 @@
         repositoryName.value = "";
         repositoryRemote.value = "";
         repositoryBranch.value = "main";
+        repositoryPublishMode.value = "direct";
         repositoryCredential.value = "";
         repositoryRawRoot.value = "raw";
         repositoryCuratedRoot.value = "curated";
@@ -938,6 +949,7 @@
         repositoryName.value = repository.name;
         repositoryRemote.value = repository.remote_url;
         repositoryBranch.value = repository.default_branch;
+        repositoryPublishMode.value = repository.publish_mode || "direct";
         repositoryCredential.value = repository.credential_ref;
         repositoryRawRoot.value = repository.raw_root;
         repositoryCuratedRoot.value = repository.curated_root;

@@ -8,12 +8,13 @@ from pathlib import Path
 from sqlalchemy import text
 
 from app.converters.text import convert_to_markdown
-from app.db import create_database_engine
+from app.db import create_database_engine, initialize_database
 
 
 def run_next_conversion(database_url: str, storage_root: Path) -> bool:
     engine = create_database_engine(database_url)
     try:
+        initialize_database(engine)
         with engine.begin() as connection:
             run = connection.execute(
                 text(
