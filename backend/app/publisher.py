@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,6 +62,8 @@ def publish_worktree(
     curated_path: str,
     curated_markdown: str,
     commit_message: str,
+    commit_author_name: str | None = None,
+    commit_author_email: str | None = None,
 ) -> PublishResult:
     """Write publication files and create an idempotent commit in a Git worktree."""
     if not worktree.is_dir() or not (worktree / ".git").exists():
@@ -85,7 +88,20 @@ def publish_worktree(
     if staged_check.returncode != 1:
         raise PublishError("Unable to inspect staged Git changes")
 
-    _run_git(worktree, "commit", "-m", commit_message)
+    author_name = commit_author_name or os.getenv("WIKI_WRANGLER_GIT_AUTHOR_NAME", "Wiki Wrangler")
+    author_email = commit_author_email or os.getenv(
+        "WIKI_WRANGLER_GIT_AUTHOR_EMAIL", "wiki-wrangler@localhost"
+    )
+    _run_git(
+        worktree,
+        "-c",
+        f"user.name={author_name}",
+        "-c",
+        f"user.email={author_email}",
+        "commit",
+        "-m",
+        commit_message,
+    )
     return PublishResult(_run_git(worktree, "rev-parse", "HEAD"), changed=True)
 
 

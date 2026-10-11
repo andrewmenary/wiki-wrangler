@@ -20,6 +20,8 @@ configuration, while partial items are intentionally called out in the notes.
   credential reference; do not create a separate paid bot account.
 - Git commits identify the publishing service account, while the actual approver remains
   attributed through publication and audit metadata.
+- Git commit name and email are supplied through deployment environment configuration;
+  no publishing email is stored in source code.
 - Published records retain the resolved raw and curated paths used at publication time.
 
 ## Phase 0 - Foundations
