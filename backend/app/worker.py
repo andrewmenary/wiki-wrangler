@@ -213,7 +213,20 @@ class PublishQueue:
                 return results
 
 
-DEFAULT_PUBLISH_QUEUE = PublishQueue()
+def get_publish_queue(
+    *,
+    redis_url: str | None = None,
+    queue_name: str | None = None,
+    runner: JobRunner | None = None,
+) -> PublishQueue:
+    return PublishQueue(
+        runner=runner,
+        redis_url=redis_url or os.getenv("WIKI_WRANGLER_REDIS_URL"),
+        queue_name=queue_name or os.getenv("WIKI_WRANGLER_PUBLISH_QUEUE", "wiki-wrangler:publish"),
+    )
+
+
+DEFAULT_PUBLISH_QUEUE = get_publish_queue()
 
 
 def queue_publish_job(
@@ -310,6 +323,21 @@ async def async_start_publish_worker(
             return results
 
 
+async def run_worker_forever(
+    *,
+    poll_interval: float = 1.0,
+    max_jobs: int | None = None,
+    redis_url: str | None = None,
+    queue_name: str | None = None,
+) -> None:
+    queue = get_publish_queue(redis_url=redis_url, queue_name=queue_name)
+    while True:
+        await async_start_publish_worker(queue, poll_interval=poll_interval, max_jobs=max_jobs)
+        if max_jobs is not None:
+            return
+        await asyncio.sleep(poll_interval)
+
+
 def _main() -> None:
     parser = argparse.ArgumentParser(description="Run the Wiki Wrangler publish worker")
     parser.add_argument("--poll-interval", type=float, default=1.0)
@@ -318,12 +346,14 @@ def _main() -> None:
     parser.add_argument("--queue-name", default=os.getenv("WIKI_WRANGLER_PUBLISH_QUEUE", "wiki-wrangler:publish"))
     args = parser.parse_args()
 
-    queue = PublishQueue(redis_url=args.redis_url, queue_name=args.queue_name)
-    while True:
-        start_publish_worker(queue, poll_interval=args.poll_interval, max_jobs=args.max_jobs)
-        if args.max_jobs is not None:
-            return
-        time.sleep(args.poll_interval)
+    asyncio.run(
+        run_worker_forever(
+            poll_interval=args.poll_interval,
+            max_jobs=args.max_jobs,
+            redis_url=args.redis_url,
+            queue_name=args.queue_name,
+        )
+    )
 
 
 if __name__ == "__main__":

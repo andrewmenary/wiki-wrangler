@@ -7,6 +7,7 @@ from app.worker import (
     PublishJobStatus,
     PublishQueue,
     async_start_publish_worker,
+    get_publish_queue,
     start_publish_worker,
 )
 
@@ -154,3 +155,10 @@ def test_async_start_publish_worker_runs_jobs_in_asyncio() -> None:
     assert len(results) == 1
     assert results[0].commit_sha == "async123"
     assert queue.get_status("job-async") == PublishJobStatus.SUCCEEDED
+
+
+def test_get_publish_queue_builds_env_configured_queue() -> None:
+    queue = get_publish_queue(redis_url="redis://example:6379/0", queue_name="custom:jobs")
+
+    assert isinstance(queue, PublishQueue)
+    assert queue._queue_name == "custom:jobs"
