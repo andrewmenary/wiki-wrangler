@@ -450,6 +450,7 @@
     const pasteContent = document.querySelector("#paste-content");
     const pasteTitle = document.querySelector("#paste-title");
     const pasteSource = document.querySelector("#paste-source");
+    let pastedHtml = "";
     const uploadForm = document.querySelector("#upload-form");
     const fileInput = document.querySelector("#file-input");
     const fileTitle = document.querySelector("#file-title");
@@ -1049,19 +1050,24 @@
           credentials: "same-origin",
           body: JSON.stringify({
             title: pasteTitle.value.trim(),
-            source_type: "pasted",
+            source_type: pastedHtml ? "pasted_html" : "pasted",
             source_ref: pasteSource.value.trim() || null,
-            markdown: pasteContent.value,
+            markdown: pastedHtml || pasteContent.value,
           }),
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.detail || "Could not add pasted note");
         pasteForm.reset();
+        pastedHtml = "";
         captureMessage.textContent = "Pasted note added to inbox.";
         await loadItems();
       } catch (error) {
         captureMessage.textContent = error.message;
       }
+    });
+
+    pasteContent.addEventListener("paste", (event) => {
+      pastedHtml = event.clipboardData?.getData("text/html") || "";
     });
 
     uploadForm.addEventListener("submit", async (event) => {

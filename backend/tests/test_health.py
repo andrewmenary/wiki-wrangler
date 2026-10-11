@@ -43,6 +43,26 @@ async def test_health_reports_database_status(client: httpx.AsyncClient) -> None
     assert response.json() == {"status": "ok", "database": "ok"}
 
 
+async def test_pasted_html_capture_creates_generated_draft(
+    authenticated_client: httpx.AsyncClient,
+) -> None:
+    response = await authenticated_client.post(
+        "/api/items",
+        json={
+            "title": "Pasted guide",
+            "source_type": "pasted_html",
+            "source_ref": "https://internal.example/guide",
+            "markdown": "<h1>Restart guide</h1><p><strong>Step one</strong></p>",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "draft"
+    item = await authenticated_client.get(f"/api/items/{response.json()['id']}")
+    assert item.json()["status"] == "draft"
+    assert item.json()["markdown_generated"] == "# Restart guide\n\n**Step one**"
+
+
 async def test_publishing_tables_are_initialized(client: httpx.AsyncClient, tmp_path) -> None:
     with sqlite3.connect(tmp_path / "test.sqlite3") as database:
         tables = {

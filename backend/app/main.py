@@ -847,6 +847,10 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
     def capture_item(request: CaptureRequest) -> dict[str, str]:
         submission_id = str(uuid4())
         item_id = str(uuid4())
+        markdown = request.markdown
+        if request.source_type == "pasted_html" and markdown is not None:
+            _, markdown = html_to_markdown(markdown.encode("utf-8"))
+        pasted_capture = request.source_type in {"pasted", "pasted_html"}
         with engine.begin() as connection:
             connection.execute(
                 text(
@@ -864,18 +868,26 @@ def create_app(database_url: str | None = None, storage_path: Path | None = None
             connection.execute(
                 text(
                     """
-                    INSERT INTO items (id, submission_id, title, markdown_final)
-                    VALUES (:id, :submission_id, :title, :markdown)
+                    INSERT INTO items
+                        (id, submission_id, title, status, markdown_generated, markdown_final)
+                    VALUES
+                        (:id, :submission_id, :title, :status, :markdown_generated, :markdown_final)
                     """
                 ),
                 {
                     "id": item_id,
                     "submission_id": submission_id,
                     "title": request.title,
-                    "markdown": request.markdown,
+                    "status": "draft" if pasted_capture else "inbox",
+                    "markdown_generated": markdown if pasted_capture else None,
+                    "markdown_final": markdown,
                 },
             )
-        return {"id": item_id, "submission_id": submission_id, "status": "inbox"}
+        return {
+            "id": item_id,
+            "submission_id": submission_id,
+            "status": "draft" if pasted_capture else "inbox",
+        }
 
     @app.get("/api/items", dependencies=[Depends(require_session)])
     def list_items(status: str | None = None) -> list[dict[str, object]]:
