@@ -36,6 +36,12 @@
       padding: 3rem clamp(1.25rem, 5vw, 5rem);
     }
     .intro { max-width: 560px; }
+    .brand-mark {
+      display: block;
+      width: min(270px, 58vw);
+      height: auto;
+      margin: 0 0 1.5rem;
+    }
     .eyebrow {
       margin: 0 0 1.5rem;
       color: var(--accent-dark);
@@ -205,9 +211,10 @@
 <body>
   <main>
     <section class="intro" aria-labelledby="page-title">
-      <p class="eyebrow">A quieter way to keep knowledge</p>
+      <img class="brand-mark" src="/logo.png" alt="Wiki Wrangler logo">
+      <p class="eyebrow">Where Content Becomes Knowledge.</p>
       <h1 id="page-title">Wiki<br>Wrangler</h1>
-      <p>Capture the useful fragments, shape them into durable notes, and keep your team wiki worth returning to.</p>
+      <p>Capture the useful fragments, shape them into durable notes, and keep your wiki worth returning to.</p>
     </section>
     <section class="panel" aria-live="polite">
       <div id="auth-view">
