@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: backend
@@ -39,7 +39,7 @@ jobs:
         run: docker compose -f deploy/docker-compose.yml build api
 
   browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: backend
     steps:
       - name: Check out repository
